@@ -1,12 +1,12 @@
-# Contributing to Adaptive Agent Authorization
+# Contributing to PennyWise
 
-This project is designing a TypeScript authorization layer that adjusts agent spending authority based on observable behavior. The repository currently contains documentation only. APIs, package paths and test commands described in the design are planned, not installed or executable.
+PennyWise is a planned TypeScript authorization layer that adjusts agent spending authority based on observable behavior. The repository currently contains documentation and an MIT license. APIs, package paths and test commands described in the design are planned, not installed or executable.
 
 Start with the [README](README.md), then the [core design](docs/core-authorization-design.md). Security and accounting semantics in that document are the shared contract for future contributions.
 
 ## Current Contribution Status
 
-Design reviews, documented counterexamples and scenario proposals are useful now. No license has been selected; do not assume contributions are accepted under an unspecified future license. The maintainer must select a license and establish contribution terms before accepting substantive patches.
+Design reviews, documented counterexamples and scenario proposals are useful now. PennyWise uses the [MIT License](LICENSE); contributions should be provided under that license. Discuss substantial implementation proposals with the maintainer before starting work.
 
 A concrete private security-reporting channel is also not configured yet. Establish it before inviting executable security testing or publishing the first executable release. Do not invent an email address or imply that an unconfigured advisory process is available.
 
@@ -159,7 +159,7 @@ State algorithm/baseline versions, seeds, sample units, hardware and uncertainty
 - [ ] Appropriate tests or document checks were actually run.
 - [ ] README, design, diagrams and contributor guidance remain consistent.
 - [ ] No credentials, reusable payment signatures or real funds are included.
-- [ ] License and contribution terms are established before the patch is accepted.
+- [ ] The contribution is compatible with the MIT license, and required third-party notices are preserved.
 
 Security-critical changes deserve a second independent review where available, but this is not a requirement to block ordinary documentation corrections or small unrelated contributions.
 
@@ -171,5 +171,4 @@ Be specific and respectful. Challenge assumptions with traces, counterexamples a
 
 ## Licensing
 
-No license has been selected. Apache-2.0 remains a maintainer decision. Do not use “by contributing you accept whichever license is selected later.” Once a license is committed, replace this section with the actual contribution terms and link to that file.
-
+PennyWise is licensed under the [MIT License](LICENSE). Submit contributions under the same license, and include only material you have the right to contribute. Preserve applicable copyright and license notices for third-party material.

@@ -1,14 +1,16 @@
-# Adaptive Agent Authorization
+# PennyWise
 
-> A TypeScript authorization layer that adjusts an autonomous agent's financial authority as its behavior changes.
+> Adaptive spending authorization for autonomous agents, with behavior-based limits, human approvals, and enforceable budgets.
 
-**Status: design stage.** This repository currently contains documentation. There is no executable SDK, gateway, package installation, or verified security implementation yet. It is intended for open-source release after a license is selected.
+PennyWise is about making wise decisions with your pennies: giving agents room to spend while adjusting their financial authority as behavior changes.
+
+**Status: design stage.** This MIT-licensed repository currently contains documentation. There is no executable SDK, gateway, package installation, or verified security implementation yet. The controls described here are planned, not implemented guarantees.
 
 [Core design](docs/core-authorization-design.md) · [Contributing](CONTRIBUTING.md) · [Development phases](#development-phases)
 
 ## What We Are Building
 
-Adaptive Agent Authorization will sit between an agent and its payment infrastructure. The agent proposes a purchase; the service checks policy and behavior, reserves the maximum permitted exposure, coordinates approval when needed, and controls execution through a restricted signer.
+PennyWise is a planned TypeScript authorization layer between an agent and its payment infrastructure. The agent proposes a purchase; the service checks policy and behavior, reserves the maximum permitted exposure, coordinates approval when needed, and controls execution through a restricted signer.
 
 The system returns `ALLOW`, `DENY`, or `REQUIRE_APPROVAL`. Observable changes in the agent's behavior can lower its autonomous allowance, require approval for more payments, or freeze new execution. Human approval of one payment does not restore the agent's general authority.
 
@@ -147,15 +149,16 @@ docs/
   core-authorization-design.md
 README.md
 CONTRIBUTING.md
+LICENSE
 ```
 
-Only the Markdown documents currently exist.
+Only the Markdown documents and MIT license currently exist.
 
 ## Development Phases
 
 | Phase | Deliverable and acceptance gate |
 |---|---|
-| 0 — Contracts and static policy | Workspace, identity binding, canonical requests, policy rules, selected license, CI and static boundary tests. |
+| 0 — Contracts and static policy | Workspace, identity binding, canonical requests, policy rules, CI and static boundary tests. MIT license already added. |
 | 1 — Ledger and execution safety | Atomic reservations, scoped idempotency, stable execution identities, outbox, crash recovery and concurrency tests. |
 | 2 — Mock x402 payment | Isolated gateway and mock signer; normal, duplicate and uncertain payments accounted for end to end. |
 | 3 — Durable approvals | Authenticated approvals, current-state revalidation, bounded pending requests and separate operator recovery. |
@@ -186,5 +189,4 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) for concrete starter tasks, acceptance c
 
 No real funds or secrets should be used in the initial example. A concrete private disclosure contact must be established before an executable public release; none is configured in this draft.
 
-No license has been selected. Apache-2.0 remains a proposal for the maintainer to decide. The project should not claim to be a licensed open-source release until a license is added, and contributions are not accepted under an unspecified future license.
-
+PennyWise is licensed under the [MIT License](LICENSE). Licensing does not imply production readiness or verified security.

@@ -1,4 +1,4 @@
-# Core Authorization Design
+# PennyWise — Core Authorization Design
 
 **Status:** Proposed design, revised 10 October 2026. No executable implementation or proven security guarantees exist yet.
 
@@ -31,7 +31,7 @@
 
 ## 1. Product and boundaries
 
-Build an authorization layer that gives an autonomous agent useful spending authority while reducing its autonomous allowance when observable behavior becomes suspicious. The service accepts payment intents, enforces owner policy, accounts for exposure, coordinates human approval, controls execution, and reconciles settlement.
+PennyWise is a planned authorization layer that gives an autonomous agent useful spending authority while reducing its autonomous allowance when observable behavior becomes suspicious. The service accepts payment intents, enforces owner policy, accounts for exposure, coordinates human approval, controls execution, and reconciles settlement.
 
 Three controls remain separate:
 
@@ -679,7 +679,7 @@ This six-phase sequence replaces the earlier nine-phase roadmap. Tests grow with
 
 | Phase | Work | Acceptance gate |
 |---|---|---|
-| 0 — Contracts and static policy | TypeScript workspace, identity binding, exact wire/canonical types, immutable policies, selected license, CI and policy tests | Hard denials and ownership boundaries have deterministic fixtures; no executable payments yet |
+| 0 — Contracts and static policy | TypeScript workspace, identity binding, exact wire/canonical types, immutable policies, CI and policy tests; MIT license already added | Hard denials and ownership boundaries have deterministic fixtures; no executable payments yet |
 | 1 — Ledger and execution safety | Memory/SQLite contract, shared budgets, scoped idempotency, unique execution claims, outbox and crash records | Real-store concurrency, rollover and duplicate-claim tests pass |
 | 2 — Mock x402 payment | Isolated gateway, restricted mock signer, exact adapter, reconciler and example | S01/S05/S13–S16/S22 prove one debit identity and retained uncertainty |
 | 3 — Durable approvals | Approval events, authenticated responses, pending caps, expiry and separate recovery APIs | S11/S12/S17/S20/S21/S25 pass with restarts and races |
@@ -720,7 +720,7 @@ Defer automatic baseline promotion, extra assets/chains, arbitrary contract perm
 
 Before executable public release:
 
-- Select and add a license; do not presume agreement to an unspecified future license.
+- Retain the existing [MIT License](../LICENSE) and verify that dependency licenses and required notices are compatible with distribution.
 - Configure a real private vulnerability-reporting channel.
 - Publish pinned toolchain versions and commands that actually run.
 - Pin the supported x402 version/scheme and document adapter evidence/finality assumptions.
