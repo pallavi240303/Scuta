@@ -1,10 +1,10 @@
 # PennyWise — Core Authorization Design
 
-**Status:** Proposed design, revised 10 October 2026. No executable implementation or proven security guarantees exist yet.
+**Status:** Proposed design, revised 11 October 2026. No executable implementation or proven security guarantees exist yet.
 
-**Scope:** One TypeScript authorization service, one authoritative database, one configured asset and network, and a mock x402 payment path. All APIs below are proposed contracts or pseudocode.
+**Scope:** One TypeScript gateway and authoritative store, deterministic adaptive authority, durable approvals, a mock x402 profile, and one external sandbox/testnet integration before the first complete release. All APIs below are proposed contracts or pseudocode; no hosted wallet provider is selected.
 
-[Project overview](../README.md) · [Contribution guide](../CONTRIBUTING.md)
+[How PennyWise works](how-pennywise-works.md) · [Project overview](../README.md) · [Contribution guide](../CONTRIBUTING.md)
 
 ## Contents
 
@@ -21,7 +21,7 @@
 - [11. Settlement and reservation lifecycle](#11-settlement-and-reservation-lifecycle)
 - [12. Storage and transactional events](#12-storage-and-transactional-events)
 - [13. Authorization guards](#13-authorization-guards)
-- [14. Audit integrity and Merkle structures](#14-audit-integrity-and-merkle-structures)
+- [14. Decision records and audit boundaries](#14-decision-records-and-audit-boundaries)
 - [15. Failure handling](#15-failure-handling)
 - [16. Scenarios and expected results](#16-scenarios-and-expected-results)
 - [17. Implementation phases](#17-implementation-phases)
@@ -31,7 +31,9 @@
 
 ## 1. Product and boundaries
 
-PennyWise is a planned authorization layer that gives an autonomous agent useful spending authority while reducing its autonomous allowance when observable behavior becomes suspicious. The service accepts payment intents, enforces owner policy, accounts for exposure, coordinates human approval, controls execution, and reconciles settlement.
+PennyWise adaptively authorizes agent transactions using observed behavior and financial exposure, while enforcing owner-defined limits and accounting for unresolved payments. This document specifies the implementation. The [goals and success criteria](how-pennywise-works.md#1-objective-and-success-criteria) define the fixed objective: contain unwanted spending while preserving useful autonomy.
+
+Every feature must strengthen authorization, exposure accounting, adaptation, approval safety, or evidence of those properties. Wallet/provider choice is infrastructure, not a change to this objective.
 
 Three controls remain separate:
 
@@ -52,6 +54,8 @@ The reference gateway protects against a compromised agent, not a compromised ga
 ### Initial payment boundary
 
 Support x402 `exact` using the EIP-3009 transfer method, one configured network and one asset. Begin with a protocol-shaped mock signer, facilitator and resource. Pin the protocol/SDK versions when implementation begins and reject other schemes and transfer methods.
+
+The pure policy core consumes normalized payment fields, not provider SDK objects. A hosted wallet can supply the execution adapter only if it supports the bounded debit, fixed payment identity, restricted credentials and verified outcome requirements below. Provider independence is an architectural boundary, not a promise of compatibility with every wallet or payment rail.
 
 The service reserves the maximum agent-funded debit defined by the adapter. The first mock profile has no agent-funded network fee. Any later adapter with fees must reserve a known upper bound in every affected asset or reject the operation.
 
@@ -123,7 +127,7 @@ Guarantees assume all relevant payment authority is routed through the service. 
 | Approval broker | Pending reservation → authenticated, bound approval record | Durable notification, expiry, approver authorization, duplicate handling and revalidation. |
 | Execution coordinator | Reservation ID → stable execution operation | Revalidate, claim once, persist nonce/payload, dispatch and recover without a fresh debit. |
 | Settlement reconciler | Durable operation plus verified external evidence → ledger transition | Establish settlement or non-execution; retain uncertain exposure. |
-| Audit recorder | Decision and state transition → durable ordered event | Preserve provenance, explanations and optional externally verifiable checkpoints. |
+| Audit recorder | Decision and state transition → durable ordered event | Preserve policy provenance, explanations, and evidence references. |
 
 The SDK exposes proposed `authorize`, `execute` and `getStatus` methods. Approval, recovery and policy administration have separate authenticated APIs. The agent-facing SDK has no `release`, `commit` or raw-signing method.
 
@@ -157,7 +161,7 @@ All active states, including `PENDING_APPROVAL`, `RESERVED`, `EXECUTING` and `PE
 
 Autonomous transaction allowance is the minimum of the hard transaction ceiling, configured autonomous ceiling, state ceiling and any cold-start ceiling. A payment above the autonomous allowance can require approval only if it still passes every hard rule and the policy explicitly permits approval.
 
-Future adaptive rolling-budget reductions must be represented as separate autonomous budget accounts with explicit accounting. Version 1 changes autonomous transaction allowance and approval requirement only; hard rolling-budget ceilings stay fixed until an authorized policy update.
+Version 1 changes autonomous transaction allowance and approval requirement only; hard rolling-budget ceilings stay fixed until an authorized policy update. Adaptive changes must not erase prior spend or outstanding exposure.
 
 Do not automatically override a hard ceiling after approval. Changing it requires a separately authorized policy revision.
 
@@ -255,7 +259,7 @@ Approving that eleventh request allows its execution after revalidation. The sta
 
 ## 7. Requests and public contracts
 
-The following types are illustrative contracts. Runtime schemas, adapter fixtures and migrations will be implemented together; these snippets are not an SDK.
+The following types are illustrative contracts for the first x402 gateway profile, not provider-independent core types or a runnable SDK. Runtime schemas, adapter fixtures and migrations will be implemented together; the core consumes validated normalized fields.
 
 ```ts
 interface PaymentIntentWire {
@@ -499,7 +503,7 @@ The execution-claim commit is the admission boundary for version 1. A freeze or 
 
 Workers should stop a pre-freeze queued operation when they can prove no signing or dispatch began. Otherwise they must conservatively treat it as potentially issued. Do not claim instantaneous revocation of a signed payment.
 
-Self-contained authorization proofs are deferred. Adding them requires signer-side nonce consumption, audience binding and an explicit revocation/freshness contract. An offline valid proof cannot by itself know that a new freeze occurred.
+Execution relies on current authoritative state, not a portable permission token that could outlive a freeze.
 
 ## 11. Settlement and reservation lifecycle
 
@@ -543,6 +547,8 @@ Never-claimed reservations can expire or cancel atomically because only `EXECUTI
 
 ## 12. Storage and transactional events
 
+The [technology decision record](technology-decisions.md#1-why-sqlite-first-rather-than-postgresql) explains the SQLite-first, single-host boundary and when PostgreSQL is the better deployment choice. Store interchangeability means preserving the invariants through adapter-specific transactions and tests, not substituting a database URL. No database is required in Phase 0.
+
 ### Tables and ownership
 
 | Logical table | Important fields or constraints |
@@ -571,7 +577,7 @@ Revision counters change on policy activation, authority transition and explicit
 
 Budget checks, relevant operational counters, authority changes, reservation allocations, decisions and outbox writes use the same database transaction. Approval and execution updates also use compare-and-set lifecycle checks. Rebuild behavior features from durable events; a missing or inconsistent security-critical feature snapshot fails closed rather than silently becoming a safe baseline.
 
-Notifications, metrics export and optional integrity anchoring happen after commit. Consumers deduplicate event IDs. A transactional outbox avoids losing an event between a successful database write and a failed notification call; it does not make external payment systems part of the database transaction.
+Notifications and metrics export happen after commit. Consumers deduplicate event IDs. A transactional outbox avoids losing an event between a successful database write and a failed notification call; it does not make external payment systems part of the database transaction.
 
 ### Recovery and scale
 
@@ -594,29 +600,17 @@ Version 1 is a single-host reference deployment. Independent SQLite copies must 
 | Signer | Persisted exact payload, stable nonce, domain and signer binding | Refuse changed payload |
 | Settlement | Validated matching evidence, finality and non-redeemability | Commit, verified release, or retain uncertainty |
 | Recovery | Separate permission or explicit qualified cooldown rule | No implicit recovery from a payment approval |
-| Audit | Transactionally durable event, stable encoding, retained checkpoints | Detect divergence within the documented trust model |
+| Audit | Transactionally durable event, stable encoding, policy and evidence references | Explain decisions and reconstruct known operations; no administrator-tampering guarantee |
 
-## 14. Audit integrity and Merkle structures
+## 14. Decision records and audit boundaries
 
 First preserve durable events in the authoritative transaction. Record request and policy digests, baseline/algorithm version, relevant features, authority revisions, reservation/execution IDs, reasons and evidence references. Exclude credentials and reusable payment signatures from ordinary logs.
 
-Canonical hash chaining can later use domain-separated, unambiguous encoding:
+Serialize event ordering in the authoritative store and define redaction before persistence. Link each decision to the exact policy version and operation so an operator can explain why a payment was allowed, denied, or held for approval. Export and notification retries use durable event IDs; they do not change financial outcomes.
 
-```text
-eventHash = SHA256(encode(
-  "aaa.audit.v1", logId, sequenceNumber, previousHash, canonicalEvent
-))
-```
+These records are for debugging, reconciliation, and evaluation. They do not make history tamper-proof against a database or host administrator. If an old database backup is restored or relevant history is known to be missing, pause new spending and reconcile outstanding authorizations before resuming. Detection of arbitrary privileged rewriting is not an implemented or promised capability.
 
-Concurrent event ordering must be serialized. Redaction is defined before committing an event; later deletion or alteration cannot be hidden as routine log maintenance.
-
-Merkle trees or a Merkle Mountain Range can supply inclusion and append-only consistency evidence. They do not prove that a payment was legitimate, that all relevant events were recorded, or that the behavior computation was correct.
-
-Signed roots alone do not rule out rollback or multiple inconsistent histories. Retain trusted earlier checkpoints outside the mutable service state and verify progression; stronger deployments can use independent witnesses. State which attacker the commitment detects and which it does not.
-
-Keep integrity export off the financial decision path after the event is durably committed. If external checkpoints are required by deployment policy, cap acceptable lag and stop new execution when that bound is exceeded. No external anchoring requirement applies to the initial mock profile.
-
-Fast behavior calculations use indexed windows and materialized aggregates. No general anomaly-detection speedup is claimed from Merkle hashing.
+Behavior calculations use indexed time windows and stored aggregates. Audit storage is not the behavioral algorithm.
 
 ## 15. Failure handling
 
@@ -669,22 +663,26 @@ Use fixed clocks, versioned fixtures and a durable mock provider ledger. Every c
 | S23 | Forged settlement failure from agent | Ignored as release authority; reconciliation requires validated evidence |
 | S24 | Operator lowers a budget below already incurred exposure | No negative accounting or retroactive erasure; zero new headroom |
 | S25 | Approval declined, human unavailable, or agent idle | No automatic freeze/recovery solely from these events |
-| S26 | Logs are truncated or database is rolled back | Retained checkpoint exposes divergence where available; spending paused for recovery |
+| S26 | Operator restores an old database backup or discovers missing operation history | Restore/recovery procedure pauses spending until reconciliation; arbitrary privileged tampering is not claimed to be automatically detected |
 
 Anomaly detection can miss malicious payments resembling normal purchases. Explicitly include those false-negative scenarios. The promised hard boundary is the configured policy and accounting invariant, not perfect knowledge of agent intent.
 
 ## 17. Implementation phases
 
-This six-phase sequence replaces the earlier nine-phase roadmap. Tests grow with each phase; signer isolation enters with the first payment flow.
+This is the canonical six-phase roadmap. Tests grow with each phase; signer isolation enters with the first payment flow. README summarizes it; other guides link here rather than repeat acceptance gates.
+
+The [Phase 0 development record](development/phase-0.md) is the canonical place for that phase's initial intent, detailed design, expected and actual outcomes, and verification evidence. Its toolchain uses Bun for package management, development execution, scripts, and tests, with separate TypeScript compiler checks. These are planned implementation choices, not installed capabilities.
 
 | Phase | Work | Acceptance gate |
 |---|---|---|
-| 0 — Contracts and static policy | TypeScript workspace, identity binding, exact wire/canonical types, immutable policies, CI and policy tests; MIT license already added | Hard denials and ownership boundaries have deterministic fixtures; no executable payments yet |
+| 0 — Contracts and static policy | Bun/TypeScript workspace, host-supplied trusted scope, exact wire/canonical types, immutable policies, CI and policy tests; MIT license already added | Hard denials and ownership boundaries have deterministic fixtures; no credential authentication, reservations or signing yet |
 | 1 — Ledger and execution safety | Memory/SQLite contract, shared budgets, scoped idempotency, unique execution claims, outbox and crash records | Real-store concurrency, rollover and duplicate-claim tests pass |
 | 2 — Mock x402 payment | Isolated gateway, restricted mock signer, exact adapter, reconciler and example | S01/S05/S13–S16/S22 prove one debit identity and retained uncertainty |
 | 3 — Durable approvals | Approval events, authenticated responses, pending caps, expiry and separate recovery APIs | S11/S12/S17/S20/S21/S25 pass with restarts and races |
 | 4 — Adaptive authority | Three signals, reviewed baseline versions, reference policy and qualified recovery | Worked trace, cold-start tests and deterministic state transitions pass |
-| 5 — Evaluation and adoption | Testkit, static comparisons, held-out scenarios, overhead measurements and contributor examples | Results and limitations reproducible; release docs match implemented behavior |
+| 5 — Evaluation and adoption | Testkit, static comparisons, held-out scenarios, overhead measurements, one external sandbox/testnet adapter and contributor examples | Provider/network records reconcile with the ledger; evaluation and limitations reproducible; release docs match implemented behavior |
+
+Select the external integration only after confirming access, sandbox/testnet support, debit bounds, retry semantics, credential isolation, status lookup and evidence/finality requirements. It validates the payment boundary; it does not replace mock fault injection or durable-store tests. Adaptation remains required for the first complete release even though adopters may disable it.
 
 The smallest full demonstration is a normal purchase, a retry burst restricting autonomy, an unusual payment needing approval, and a freeze preventing a subsequent claim. Include concurrency and process-crash runs.
 
@@ -710,13 +708,15 @@ Compare four configurations under the same hard ceilings, accounting, execution 
 
 Tune thresholds on development workloads and report results on held-out benign and adversarial workloads. Match approval burden or plot its trade-off against task completion and loss; tighter blocking alone is not evidence of better adaptation.
 
+Define acceptable task-completion and approval trade-offs before evaluating; do not invent a numerical improvement target without baseline evidence. The research question is whether adaptive authority improves that balance, not whether every abnormal-looking purchase can be detected.
+
 Report loss before containment, time and transaction count before restriction, legitimate task completion, false blocks, approval frequency/latency, recovery time, unresolved exposure, and p50/p95 authorization latency with database contention. State the sample unit, seeds, hardware and uncertainty intervals where appropriate. Separate simulator claims from integration results.
 
 Use ablations for amount deviation, novelty, velocity, persistence and recovery. Include attackers staying below thresholds, legitimate workload changes, poisoning, reset attempts and defensive denial of service. Negative results remain useful.
 
 ## 19. Deferred scope and release gates
 
-Defer automatic baseline promotion, extra assets/chains, arbitrary contract permissions, dynamic shared-window reductions, portable authorization proofs, multi-host deployment and Merkle proofs until their contracts and tests justify them.
+The initial scope excludes custody infrastructure, trading, general agent orchestration, LLM-based authorization, dashboards, multiple external providers, automatic baseline promotion, extra assets/chains, arbitrary contract permissions, dynamic shared-window reductions, portable authorization proofs, and multi-host deployment. These are not commitments in the current roadmap.
 
 Before executable public release:
 
@@ -725,6 +725,7 @@ Before executable public release:
 - Publish pinned toolchain versions and commands that actually run.
 - Pin the supported x402 version/scheme and document adapter evidence/finality assumptions.
 - Verify all financial invariants on the durable store and mock provider.
+- For the first complete release, verify one external sandbox/testnet integration, demonstrate adaptive restriction/recovery and approvals, and publish the static-versus-adaptive evaluation. A static-policy or mock-only milestone is not the complete project.
 - Clearly distinguish guardrail mode from isolated enforcement and simulation from production readiness.
 
 No real-fund safety claim is made by this document.
@@ -737,7 +738,3 @@ These sources informed the design review; links are references, not dependencies
 - [x402 exact EVM specification](https://github.com/x402-foundation/x402/blob/main/specs/schemes/exact/scheme_exact_evm.md) — transfer methods and settlement observations. Pin a revision at implementation.
 - [SQLite isolation](https://www.sqlite.org/isolation.html) — serialized writes and transaction behavior.
 - [Transactional outbox guidance](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html) — durable state/event delivery boundaries.
-- [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162.html) — inclusion and consistency proofs for append-only logs.
-- [Bridle](https://github.com/IgarzaTech/bridle) and [Axiru](https://axiru.com/open-source) — adjacent reservation, policy and agent-spending tools.
-- [APort Vault](https://arxiv.org/abs/2609.22076) — related authorization benchmarking.
-- [402Pilot](https://arxiv.org/abs/2608.01341) — adjacent adaptive purchasing research; service selection differs from security-driven authority restriction.

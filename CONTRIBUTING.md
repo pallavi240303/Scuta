@@ -1,174 +1,93 @@
 # Contributing to PennyWise
 
-PennyWise is a planned TypeScript authorization layer that adjusts agent spending authority based on observable behavior. The repository currently contains documentation and an MIT license. APIs, package paths and test commands described in the design are planned, not installed or executable.
+PennyWise is at the design stage: documentation and an [MIT license](LICENSE), with no executable toolchain yet. Design reviews, counterexamples, and scenario proposals are useful now. Discuss substantial implementation changes before starting them.
 
-Start with the [README](README.md), then the [core design](docs/core-authorization-design.md). Security and accounting semantics in that document are the shared contract for future contributions.
+Read the [goals and flow](docs/how-pennywise-works.md), then the [engineering contract](docs/core-authorization-design.md). A contribution must strengthen authorization, exposure accounting, adaptation, approval safety, or their verification. Extra providers, infrastructure, or interfaces are not goals by themselves.
 
-## Current Contribution Status
+## Design Contract
 
-Design reviews, documented counterexamples and scenario proposals are useful now. PennyWise uses the [MIT License](LICENSE); contributions should be provided under that license. Discuss substantial implementation proposals with the maintainer before starting work.
+Security-relevant changes must name the affected [invariants](docs/core-authorization-design.md#3-invariants) and [scenarios](docs/core-authorization-design.md#16-scenarios-and-expected-results). In particular:
 
-A concrete private security-reporting channel is also not configured yet. Establish it before inviting executable security testing or publishing the first executable release. Do not invent an email address or imply that an unconfigured advisory process is available.
+- Derive identity/delegation from trusted credentials; isolate all record access.
+- Reserve every applicable shared budget atomically; count pending and uncertain holds across window boundaries.
+- Keep scoped retries bound to one intent, execution identity, nonce, and immutable payload.
+- Revalidate current permission before execution; keep earlier potentially issued payments accounted for after a freeze.
+- Separate payment approval, authority recovery, and policy administration.
+- Persist decisions, reservations, authority updates, and durable events together.
+- Release executed holds only through verified reconciliation; agent reports and generic timeouts are insufficient.
+- Keep behavioral rules deterministic, with explicit cold starts and reviewed baseline versions.
 
-## What We Are Building First
+Enforcement assumes isolated, exclusive signer access. Embedded guardrails cannot protect against host code that bypasses them. Describe planned, tested, and deferred behavior separately.
 
-The first reference deployment is one service outside the agent process, one authoritative SQLite database, and one configured mock x402 payment profile. Core engines are modules, not independently deployed microservices.
+## Where to Contribute
 
-An embedded mode can reuse the core, but cannot claim protection from host code that bypasses it. Every contribution must distinguish intended behavior, tested implementation and deferred functionality.
+Use the [six-phase roadmap](docs/core-authorization-design.md#17-implementation-phases) for sequencing and acceptance gates. Start with [Phase 0](docs/development/phase-0.md); later phases should not introduce dependencies into the pure core.
 
-## Non-Negotiable Design Requirements
+Suggested issue scopes—not already-created issues:
 
-Refer to the [numbered invariants](docs/core-authorization-design.md#3-invariants) in proposals and security-relevant pull requests.
-
-- Bind identity and delegation to authenticated credentials before reading or changing financial state.
-- Check every applicable shared wallet, agent, delegation and optional task budget atomically.
-- Count live holds across window boundaries; do not free exposure because a day or TTL elapsed.
-- Scope idempotency keys and return current status on valid retries without creating new authority.
-- Bind one reservation to one execution identity, fixed payment nonce and immutable signing payload.
-- Revalidate current policy, authority, delegation, expiry and approval when claiming execution.
-- Treat already claimed or issued payments as outstanding after a freeze until resolved.
-- Keep payment approval, authority recovery and policy changes under separate permissions.
-- Commit decisions, reservations, authority changes and durable events together.
-- Release an executed operation's exposure only through validated reconciliation evidence.
-- Keep agent reports, descriptions, LLM output and payment-service responses untrusted until validated.
-- Preserve deterministic signal calculations and explicit insufficient-history behavior.
-
-These requirements are not proof that an implementation is secure. Each must have appropriate durable-store and adapter tests.
-
-## Contribution Areas by Phase
-
-The six-phase roadmap is canonical across the documentation.
-
-| Phase | Contribution areas | Acceptance evidence |
-|---|---|---|
-| 0 — Contracts and static policy | Identity binding, canonical schemas, policy precedence, toolchain and CI | Boundary fixtures, deterministic digests and documented commands |
-| 1 — Ledger and execution safety | SQLite transactions, shared budgets, scoped keys, execution claims and outbox | Separate-connection concurrency and crash-recovery tests |
-| 2 — Mock x402 payment | Isolated gateway, restricted signer, exact profile and reconciliation | One debit per operation, no signer bypass and retained uncertain exposure |
-| 3 — Durable approvals | Delivery adapters, expiry, approver permissions, caps and recovery | Stale/duplicate approval, freeze and timeout-race tests |
-| 4 — Adaptive authority | Reference signals, baseline provenance, state transitions and cooldowns | Reproducible worked traces, cold-start and false-positive cases |
-| 5 — Evaluation and adoption | Testkit, benchmark comparisons, examples and documentation | Reproducible results with legitimate-task and approval-cost measurements |
-
-Scenarios and tests grow in every phase. A dashboard, new chain, generic contract-call adapter or Merkle proof layer should not delay the core accounting and execution work.
-
-## Suggested Starter Tasks
-
-These are suggested issue scopes, not claims that GitHub issues have already been created.
-
-| Task | Concrete acceptance criteria |
+| Task | Acceptance evidence |
 |---|---|
-| Canonical amount fixtures | Cover zero, negative, exponent, overflow and leading-zero forms; preserve exact integer value across serialization. |
-| Scoped idempotency fixtures | Same key in different principals is isolated; same scoped key with changed digest conflicts; valid retry does not create another hold. |
-| Window-rollover scenario | An outstanding hold remains counted beyond its originating window, then transfers into committed spend exactly once. |
-| Approval/recovery review | One-off purchase approval leaves general authority unchanged; stale approval after freeze cannot execute. |
-| Mock signer contract | Stable nonce/payload survives retries; changed payload and unauthorized caller fail. |
-| Reference adaptive trace | Sixth and eleventh distinct requests produce the documented transitions; same-intent retry does not increment logical velocity. |
-| Diagram and terminology review | Every signing route passes execution validation; denial and approval branches match lifecycle semantics. |
-| Related-work comparison | Identify actual overlap with existing tools and distinguish documented claims from independently tested behavior. |
+| Amount and canonicalization fixtures | Exact round trips; invalid forms rejected; every bound field changes the digest |
+| Scoped retry fixtures | Cross-principal isolation; changed-intent conflict; no additional hold on a valid retry |
+| Budget rollover and concurrency | Live holds survive rollover; competing requests fit shared headroom |
+| Approval/recovery review | One-off approval preserves restriction; stale approval after freeze cannot execute |
+| Mock signer contract | Fixed nonce/payload survives retries; changed payload and unauthorized caller fail |
+| Adaptive trace | Sixth/eleventh distinct requests match the reference policy; valid retries do not increase velocity |
+| Flow and evaluation review | No signer bypass; lifecycle branches agree; claimed benefits have measurable evidence |
 
-Before the workspace exists, contribute prose fixtures and counterexamples. After it exists, convert them into tests using the project's pinned tooling.
+Before the workspace exists, contribute prose fixtures. Convert them to tests as the relevant phase begins.
 
-## Design Proposals
+## Propose Semantic Changes First
 
-Discuss a change before implementing it if it alters identity scope, digest fields, budget semantics, policy precedence, execution identity, approval binding, baseline eligibility, recovery, settlement finality or audit guarantees.
+Discuss changes to scope, digest fields, budget semantics, precedence, payment identity, approvals, baseline eligibility, recovery, finality, or audit guarantees. State the trigger, affected contracts/invariants, before/after behavior, retry/crash/concurrency/revocation implications, alternatives, compatibility cost, and a reproducible acceptance case.
 
-A focused proposal should state:
+For dependencies or deployment changes, follow [Technology decisions](docs/technology-decisions.md): record the requirement, exact choice, alternative, operational cost, and evidence. Do not present an unselected tool as a standard.
 
-1. The concrete trigger or failure.
-2. The affected contract and invariant IDs.
-3. The proposed before/after behavior.
-4. Crash, retry, concurrency and revocation behavior.
-5. Alternatives and compatibility impact.
-6. A reproducible scenario and acceptance criteria.
+## Workflow and Code Standards
 
-Do not introduce a new primitive solely because it sounds more secure or scalable. Explain which requirement it satisfies. Avoid silently converting future roadmap items into mandatory runtime dependencies.
+Phase 0 must pin Bun and TypeScript, commit `bun.lock`, and add runtime validation, strict type checking, formatting/linting, `bun:test` files, build checks, and CI. No second package-manager lockfile. [Planned scripts](docs/development/phase-0.md#planned-scripts) are not available yet; publish commands only after verifying them from a clean checkout. No remote, issue tracker, CI provider, or reporting channel is assumed to exist.
 
-## Development Workflow
+Use focused branches and small PRs. Keep one phase record under `docs/development/` containing intent, expected/actual outcome, tests, exact verification evidence, decisions, and lessons. Record failures as well as passes; do not include sensitive logs. Add a root changelog when user-facing implementation changes exist.
 
-There is no package manifest or executable toolchain yet. No install, build or test command is currently available.
-
-The Phase 0 bootstrap must add pinned Node.js and package-manager versions, a lockfile, strict TypeScript configuration, runtime schema validation, formatting/linting, test execution and CI. Update this guide with commands actually verified from a clean checkout as part of that same change.
-
-Once available, use a focused branch, keep changes small, run the relevant checks and update the affected contract documentation. No git remote, issue tracker or security channel should be assumed to exist merely because this guide describes the future workflow.
-
-## TypeScript and Data Rules
-
-- Represent money internally as bounded integer atomic units; use canonical decimal strings on the wire.
-- Do not convert monetary `bigint` values to `number` for risk comparisons.
-- Use discriminated unions so a denied decision cannot be accidentally treated as executable.
-- Validate every external field and reject unsupported schemes/capabilities.
-- Derive trusted identity from credentials, not agent-supplied labels.
-- Inject the clock and external adapters for reproducible tests.
-- Keep pure policy/behavior functions independent of signing and networking.
-- Do not put external calls inside the financial database transaction.
-- Distinguish logical request, reservation, execution, payment nonce and delivery-attempt identities.
-- Do not log credentials, reusable payment signatures or unredacted sensitive request bodies.
+- TypeScript only for product code, tests, and examples; follow the [naming and JSDoc standards](docs/development/phase-0.md#coding-and-documentation-standards).
+- Use bounded atomic-unit `bigint` internally and canonical decimal strings externally; no floating-point money or monetary `number` conversions.
+- Validate external fields and reject unsupported capabilities. Use explicit result unions and immutable validated values.
+- Inject time and adapters; keep policy/behavior pure and network calls outside financial transactions.
+- Distinguish logical requests, reservations, executions, nonces, and delivery attempts.
+- Do not log credentials, reusable payment signatures, or sensitive unredacted bodies.
 
 ## Required Verification
 
-Scale verification to the affected behavior. Documentation corrections do not require unrelated runtime tests.
+Write failing tests before implementing behavior. Scale checks to the change; prose corrections do not require unrelated runtime tests.
 
-### Policy and identity
+| Area | Required evidence |
+|---|---|
+| Policy and identity | Hard-deny precedence, owned delegation, per-scope access, immutable snapshots, canonical binding and current-state checks |
+| Ledger | Real persistent-store tests using separate connections/processes where relevant; overlapping scopes, competing claims, rollover, budget reductions and expiry races; assert balances and unique execution identities |
+| Crashes and settlement | Failures before/after commit, claim, signing, signature persistence, submission and reconciliation; paid resource error; same-operation recovery or retained uncertainty, never release on lease expiry/timeout alone |
+| Approvals and recovery | Authenticated exact binding, expired/stale/forged/duplicate/conflicting responses, policy/freeze races, queue caps and redelivery; approval never recovers authority |
+| Behavior | Exact reference thresholds, candidate-inclusive windows, insufficient history, baseline provenance, recovery qualifications and poisoning attempts; no automatic baseline promotion |
+| Payment adapter | Persisted financial fields/domain/validity/nonce, unauthorized signer access, replacement-field rejection, independently verified evidence, pinned protocol and finality assumptions |
 
-Test hard-deny precedence, delegation ownership, per-scope record access, immutable policy versions, current-state checks and canonical request binding. An approval must not bypass a hard ceiling.
+EIP-3009 does not sign the resource URL or guarantee fulfillment; local purchase binding is separate. See the [reference adaptive policy](docs/core-authorization-design.md#6-reference-adaptive-policy) and [scenario catalogue](docs/core-authorization-design.md#16-scenarios-and-expected-results).
 
-### Ledger and concurrency
-
-Run against the actual persistent adapter using separate connections, and separate processes where relevant. A test with only a mock mutex is insufficient evidence of SQLite concurrency behavior.
-
-Verify overlapping budget scopes, duplicate requests, competing claims, budget reductions below existing exposure, window rollover and expiry-versus-claim races. Assert final financial balances and unique execution identities.
-
-### Crashes and settlement
-
-Inject failures before/after transaction commit, execution claim, signing, signature persistence, submission and settlement recording. Include a successful payment followed by an application error.
-
-Every recovery path must reuse the same operation or retain uncertainty. Lease expiry, generic exceptions, request timeout and agent-reported failure must not release an executed hold.
-
-### Approval and recovery
-
-Test authenticated responder identity, exact binding, expiry, duplicate/conflicting responses, policy changes, freezes, pending count limits and delivery retries. Approval must not change authority. Recovery must use its own permission or the explicit qualified cooldown rule.
-
-### Behavior
-
-Test the exact [reference adaptive policy](docs/core-authorization-design.md#6-reference-adaptive-policy), candidate-inclusive windows, boundary thresholds, insufficient history, frozen baseline versions and recovery qualifications.
-
-Malformed/denied attempts may affect operational abuse counters but cannot become normal baseline examples. A settled purchase is not sufficient proof of benign training data. Do not silently implement automatic baseline promotion in version 1.
-
-### Adapter contract
-
-For the first x402 profile, bind the validated network, asset, recipient, value, payment validity, nonce and signing domain to the persisted operation. Independently validate settlement evidence. Resource binding in local policy must not be described as a field signed by EIP-3009 itself.
-
-Assert that the agent cannot call a raw signer or submit replacement execution fields. Pin protocol versions and declare finality assumptions.
-
-## Benchmark Contributions
-
-Compare adaptive behavior against strong static baselines using identical hard ceilings and accounting protections. Hold out evaluation workloads from tuning.
-
-Report legitimate task completion, loss, false blocks, approval burden, recovery time, uncertain exposure and latency. A system that denies everything is not a successful adaptive policy. Include slowly changing legitimate workloads, below-threshold attackers, poisoning attempts and defensive denial of service.
-
-State algorithm/baseline versions, seeds, sample units, hardware and uncertainty. Do not present a mock demonstration as a production-security result.
+Benchmark changes must use identical hard limits and accounting protections, with evaluation workloads held out from tuning. Report harmful spend, task completion, false blocks, approvals, recovery, unresolved exposure, and latency. Include legitimate drift, below-threshold attacks, poisoning, and defensive denial of service. State versions, seeds, sample units, hardware, and uncertainty; distinguish mocks from external integration results. Blocking everything is not success.
 
 ## Pull-Request Checklist
 
-- [ ] The change addresses one concrete problem and identifies affected contracts.
-- [ ] Implemented, proposed and deferred behavior are clearly distinguished.
-- [ ] Relevant invariant IDs and scenario IDs are named.
-- [ ] Amounts, identity scope and request binding remain exact.
-- [ ] Shared-budget, replay, execution and revocation implications were considered.
-- [ ] Crash and uncertain-settlement behavior is explicit.
-- [ ] Approval does not implicitly recover authority.
-- [ ] Appropriate tests or document checks were actually run.
-- [ ] README, design, diagrams and contributor guidance remain consistent.
-- [ ] No credentials, reusable payment signatures or real funds are included.
-- [ ] The contribution is compatible with the MIT license, and required third-party notices are preserved.
+- [ ] One concrete problem; affected contracts, invariant IDs, and scenarios identified.
+- [ ] Proposed, implemented, and deferred behavior distinguished.
+- [ ] Exact amounts, scope, binding, shared budgets, replay, revocation, and uncertain outcomes preserved.
+- [ ] Approval and recovery remain separate.
+- [ ] Relevant checks actually run; commands and results recorded.
+- [ ] Documentation and diagrams agree; details live in their canonical document rather than being repeated.
+- [ ] No credentials, reusable signatures, or real funds included.
+- [ ] Contribution rights, MIT compatibility, and required third-party notices preserved.
 
-Security-critical changes deserve a second independent review where available, but this is not a requirement to block ordinary documentation corrections or small unrelated contributions.
+Seek independent review for security-critical changes where available; this need not block ordinary prose corrections.
 
-## Security Research and Community
+## Security, Community, and License
 
-Use simulated assets or explicitly authorized test environments. Do not target external systems or funds without permission. Keep exploit details and secrets out of public discussions until an actual private reporting channel and disclosure process exist.
+Use simulated assets or explicitly authorized test environments; never target external funds or systems without permission. No private vulnerability-reporting channel is configured yet: establish one before executable public release and keep exploit details/secrets out of public discussions. Maintainers should publish a code of conduct and contact method as the community opens.
 
-Be specific and respectful. Challenge assumptions with traces, counterexamples and measurements. Document limitations and negative results. Maintainers should publish a concrete code of conduct and contact method as the contributor community opens.
-
-## Licensing
-
-PennyWise is licensed under the [MIT License](LICENSE). Submit contributions under the same license, and include only material you have the right to contribute. Preserve applicable copyright and license notices for third-party material.
+Be specific and respectful; use traces and measurements to challenge assumptions, and document limitations and negative results. Submit only material you have the right to contribute, under [MIT](LICENSE), preserving applicable notices.
