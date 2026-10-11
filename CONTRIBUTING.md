@@ -1,6 +1,20 @@
 # Contributing to PennyWise
 
-PennyWise is at the design stage: documentation and an [MIT license](LICENSE), with no executable toolchain yet. Design reviews, counterexamples, and scenario proposals are useful now. Discuss substantial implementation changes before starting them.
+PennyWise has a tested Phase 0 static core and an [MIT license](LICENSE). The gateway, ledger, payment integration, human approval service and adaptive engine remain planned. Boundary tests, counterexamples and focused PRs are useful now. Discuss substantial semantic changes before starting them.
+
+## Local Setup
+
+Use Bun **1.3.14**; dependencies are pinned in `package.json` and `bun.lock`:
+
+```sh
+bun install --frozen-lockfile
+bun run check
+bun run demo
+```
+
+`bun run check` builds the public package, checks formatting/lint/types, runs coverage tests with nonempty discovery and a complete core-source inventory, then verifies built exports. GitHub Actions runs the same command on push/PR; configuration is not evidence of a remote pass.
+
+Use `bun run test`, `bun run test:watch`, or `bun run test:coverage` for focused development. `bun test` can target individual source test files; build first when running consumer tests. Use `bun run format` to apply formatting and `bun run format:check` to check without changes. No real funds or credentials are needed.
 
 Read the [goals and flow](docs/how-pennywise-works.md), then the [engineering contract](docs/core-authorization-design.md). A contribution must strengthen authorization, exposure accounting, adaptation, approval safety, or their verification. Extra providers, infrastructure, or interfaces are not goals by themselves.
 
@@ -25,17 +39,17 @@ Use the [six-phase roadmap](docs/core-authorization-design.md#17-implementation-
 
 Suggested issue scopes—not already-created issues:
 
-| Task | Acceptance evidence |
-|---|---|
-| Amount and canonicalization fixtures | Exact round trips; invalid forms rejected; every bound field changes the digest |
-| Scoped retry fixtures | Cross-principal isolation; changed-intent conflict; no additional hold on a valid retry |
-| Budget rollover and concurrency | Live holds survive rollover; competing requests fit shared headroom |
-| Approval/recovery review | One-off approval preserves restriction; stale approval after freeze cannot execute |
-| Mock signer contract | Fixed nonce/payload survives retries; changed payload and unauthorized caller fail |
-| Adaptive trace | Sixth/eleventh distinct requests match the reference policy; valid retries do not increase velocity |
-| Flow and evaluation review | No signer bypass; lifecycle branches agree; claimed benefits have measurable evidence |
+| Task                                 | Acceptance evidence                                                                                 |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| Amount and canonicalization fixtures | Exact round trips; invalid forms rejected; every bound field changes the digest                     |
+| Scoped retry fixtures                | Cross-principal isolation; changed-intent conflict; no additional hold on a valid retry             |
+| Budget rollover and concurrency      | Live holds survive rollover; competing requests fit shared headroom                                 |
+| Approval/recovery review             | One-off approval preserves restriction; stale approval after freeze cannot execute                  |
+| Mock signer contract                 | Fixed nonce/payload survives retries; changed payload and unauthorized caller fail                  |
+| Adaptive trace                       | Sixth/eleventh distinct requests match the reference policy; valid retries do not increase velocity |
+| Flow and evaluation review           | No signer bypass; lifecycle branches agree; claimed benefits have measurable evidence               |
 
-Before the workspace exists, contribute prose fixtures. Convert them to tests as the relevant phase begins.
+Add Phase 0 cases as executable `*.test.ts` files. For later phases, propose concise scenario fixtures first and convert them to tests when those contracts are implemented. Phase 1 ledger design is the next implementation boundary, not an invitation to add a signer now.
 
 ## Propose Semantic Changes First
 
@@ -45,13 +59,16 @@ For dependencies or deployment changes, follow [Technology decisions](docs/techn
 
 ## Workflow and Code Standards
 
-Phase 0 must pin Bun and TypeScript, commit `bun.lock`, and add runtime validation, strict type checking, formatting/linting, `bun:test` files, build checks, and CI. No second package-manager lockfile. [Planned scripts](docs/development/phase-0.md#planned-scripts) are not available yet; publish commands only after verifying them from a clean checkout. No remote, issue tracker, CI provider, or reporting channel is assumed to exist.
+Keep Bun, TypeScript and development dependencies pinned, and include intentional `bun.lock` updates. Do not add another package-manager lockfile or bypass runtime validation, strict type checking, JSDoc/naming checks or coverage inventory. The [verified scripts and evidence](docs/development/phase-0.md#scripts) describe the current baseline. No hosted issue tracker or private security-reporting channel is assumed to exist.
 
 Use focused branches and small PRs. Keep one phase record under `docs/development/` containing intent, expected/actual outcome, tests, exact verification evidence, decisions, and lessons. Record failures as well as passes; do not include sensitive logs. Add a root changelog when user-facing implementation changes exist.
 
 - TypeScript only for product code, tests, and examples; follow the [naming and JSDoc standards](docs/development/phase-0.md#coding-and-documentation-standards).
+- Document named functions with a clear summary, meaningful `@param`/`@returns` descriptions and relevant `@throws` conditions. Explain units, preconditions and side effects; do not duplicate TypeScript types or add empty tags.
+- Put concise JSDoc above each type/interface definition, including referenced types such as `TrustedScope`; do not add comments between its fields.
 - Use bounded atomic-unit `bigint` internally and canonical decimal strings externally; no floating-point money or monetary `number` conversions.
 - Validate external fields and reject unsupported capabilities. Use explicit result unions and immutable validated values.
+- Expose precise wire types to callers; keep `unknown` at runtime validation boundaries. Narrow GET/POST before accessing body fields rather than adding assertions or non-null operators.
 - Inject time and adapters; keep policy/behavior pure and network calls outside financial transactions.
 - Distinguish logical requests, reservations, executions, nonces, and delivery attempts.
 - Do not log credentials, reusable payment signatures, or sensitive unredacted bodies.
@@ -60,14 +77,14 @@ Use focused branches and small PRs. Keep one phase record under `docs/developmen
 
 Write failing tests before implementing behavior. Scale checks to the change; prose corrections do not require unrelated runtime tests.
 
-| Area | Required evidence |
-|---|---|
-| Policy and identity | Hard-deny precedence, owned delegation, per-scope access, immutable snapshots, canonical binding and current-state checks |
-| Ledger | Real persistent-store tests using separate connections/processes where relevant; overlapping scopes, competing claims, rollover, budget reductions and expiry races; assert balances and unique execution identities |
+| Area                   | Required evidence                                                                                                                                                                                                     |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Policy and identity    | Hard-deny precedence, owned delegation, per-scope access, immutable snapshots, canonical binding and current-state checks                                                                                             |
+| Ledger                 | Real persistent-store tests using separate connections/processes where relevant; overlapping scopes, competing claims, rollover, budget reductions and expiry races; assert balances and unique execution identities  |
 | Crashes and settlement | Failures before/after commit, claim, signing, signature persistence, submission and reconciliation; paid resource error; same-operation recovery or retained uncertainty, never release on lease expiry/timeout alone |
-| Approvals and recovery | Authenticated exact binding, expired/stale/forged/duplicate/conflicting responses, policy/freeze races, queue caps and redelivery; approval never recovers authority |
-| Behavior | Exact reference thresholds, candidate-inclusive windows, insufficient history, baseline provenance, recovery qualifications and poisoning attempts; no automatic baseline promotion |
-| Payment adapter | Persisted financial fields/domain/validity/nonce, unauthorized signer access, replacement-field rejection, independently verified evidence, pinned protocol and finality assumptions |
+| Approvals and recovery | Authenticated exact binding, expired/stale/forged/duplicate/conflicting responses, policy/freeze races, queue caps and redelivery; approval never recovers authority                                                  |
+| Behavior               | Exact reference thresholds, candidate-inclusive windows, insufficient history, baseline provenance, recovery qualifications and poisoning attempts; no automatic baseline promotion                                   |
+| Payment adapter        | Persisted financial fields/domain/validity/nonce, unauthorized signer access, replacement-field rejection, independently verified evidence, pinned protocol and finality assumptions                                  |
 
 EIP-3009 does not sign the resource URL or guarantee fulfillment; local purchase binding is separate. See the [reference adaptive policy](docs/core-authorization-design.md#6-reference-adaptive-policy) and [scenario catalogue](docs/core-authorization-design.md#16-scenarios-and-expected-results).
 
@@ -85,6 +102,12 @@ Benchmark changes must use identical hard limits and accounting protections, wit
 - [ ] Contribution rights, MIT compatibility, and required third-party notices preserved.
 
 Seek independent review for security-critical changes where available; this need not block ordinary prose corrections.
+
+## Continuous Integration
+
+[GitHub Actions](.github/workflows/check.yml) runs `bun run check` on pushes and PRs: build, formatting, lint, types, tests, coverage inventory and built-package smoke verification. Run the same command locally before submitting a PR and include the results. A passing check does not establish production financial safety; security-critical changes still need focused tests and human review.
+
+CodeRabbit is deferred until the maintainer chooses a later implementation milestone and makes the repository public. No bot setup or credentials are required from contributors now. CI configuration alone does not prove a hosted pass or create branch protection.
 
 ## Security, Community, and License
 

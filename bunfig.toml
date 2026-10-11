@@ -1,0 +1,4 @@
+[test]
+coverageReporter = ["text", "lcov"]
+coverageSkipTestFiles = true
+coveragePathIgnorePatterns = ["**/*.test.ts", "**/test/**", "**/dist/**", "scripts/**", "apps/**"]

@@ -1,8 +1,8 @@
 # PennyWise — Core Authorization Design
 
-**Status:** Proposed design, revised 11 October 2026. No executable implementation or proven security guarantees exist yet.
+**Status:** Complete-system design, revised 11 October 2026. Phase 0 implements only validated inputs, static evaluation and local digest binding; see the [development record](development/phase-0.md). The ledger, gateway, payment, approval and adaptive guarantees below are not implemented or proven yet.
 
-**Scope:** One TypeScript gateway and authoritative store, deterministic adaptive authority, durable approvals, a mock x402 profile, and one external sandbox/testnet integration before the first complete release. All APIs below are proposed contracts or pseudocode; no hosted wallet provider is selected.
+**Scope:** One TypeScript gateway and authoritative store, deterministic adaptive authority, durable approvals, a mock x402 profile, and one external sandbox/testnet integration before the first complete release. APIs below are proposed full-system contracts or pseudocode, not the Phase 0 public API; no hosted wallet provider is selected.
 
 [How PennyWise works](how-pennywise-works.md) · [Project overview](../README.md) · [Contribution guide](../CONTRIBUTING.md)
 
@@ -96,19 +96,19 @@ The adapter returns normalized observations. Reconciliation verifies their prove
 
 These are requirements for implementation and tests.
 
-| ID | Requirement |
-|---|---|
-| INV-01 | A newly accepted reservation fits every applicable hard budget in one atomic transaction. |
-| INV-02 | Live holds remain exposure regardless of their age or time-window rollover. |
-| INV-03 | Within its authenticated scope, an idempotency key identifies exactly one canonical intent digest. |
-| INV-04 | One reservation binds one execution identity, one payment nonce and one immutable payment payload. |
-| INV-05 | At most one new execution claim succeeds for a reservation; retries do not create a new payable operation. |
-| INV-06 | An execution claim revalidates policy, delegation, expiry, current authority, payload and approval. |
-| INV-07 | Approval authorizes one operation; it neither overrides hard policy nor recovers authority. |
-| INV-08 | Once execution may have occurred, exposure is released only on validated proof of non-execution or final non-redeemability. |
-| INV-09 | Agents cannot administer policy, authority, baseline, approvals or settlement evidence. |
-| INV-10 | Decisions, reservations, authority changes and durable events commit together or not at all. |
-| INV-11 | Audit and baseline inputs have stable versions and deterministic serialization. |
+| ID     | Requirement                                                                                                                     |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| INV-01 | A newly accepted reservation fits every applicable hard budget in one atomic transaction.                                       |
+| INV-02 | Live holds remain exposure regardless of their age or time-window rollover.                                                     |
+| INV-03 | Within its authenticated scope, an idempotency key identifies exactly one canonical intent digest.                              |
+| INV-04 | One reservation binds one execution identity, one payment nonce and one immutable payment payload.                              |
+| INV-05 | At most one new execution claim succeeds for a reservation; retries do not create a new payable operation.                      |
+| INV-06 | An execution claim revalidates policy, delegation, expiry, current authority, payload and approval.                             |
+| INV-07 | Approval authorizes one operation; it neither overrides hard policy nor recovers authority.                                     |
+| INV-08 | Once execution may have occurred, exposure is released only on validated proof of non-execution or final non-redeemability.     |
+| INV-09 | Agents cannot administer policy, authority, baseline, approvals or settlement evidence.                                         |
+| INV-10 | Decisions, reservations, authority changes and durable events commit together or not at all.                                    |
+| INV-11 | Audit and baseline inputs have stable versions and deterministic serialization.                                                 |
 | INV-12 | A freeze prevents execution claims ordered after it; previously claimed or issued payments remain conservatively accounted for. |
 
 INV-01 is an admission guarantee, not a claim that lowering a budget can undo previous commitments. When a new limit is lower than existing exposure, headroom is zero and no new reservation is admitted.
@@ -117,17 +117,17 @@ Guarantees assume all relevant payment authority is routed through the service. 
 
 ## 4. Core engines
 
-| Engine | Input and output | Responsibility |
-|---|---|---|
-| Request boundary | Credentials and wire intent → trusted principal and canonical intent | Authenticate, resolve delegation ownership, validate shape and limits, compute digest. |
-| Hard-policy engine | Canonical intent, policy snapshot and budget state → prohibitions and approval requirements | Enforce transaction, recipient, network, capability and budget restrictions. |
-| Behavior engine | Operational window, active baseline and current intent → versioned signals | Compute velocity, amount deviation and recipient familiarity deterministically. |
-| Authority engine | Signals and persisted state → tighter state and autonomous allowance | Apply precedence, restrictions, cooldowns and explicit recovery rules. |
-| Reservation ledger | Scoped debit and all budget accounts → hold or denial | Atomically check headroom, persist allocations, commit verified spend and safely release holds. |
-| Approval broker | Pending reservation → authenticated, bound approval record | Durable notification, expiry, approver authorization, duplicate handling and revalidation. |
-| Execution coordinator | Reservation ID → stable execution operation | Revalidate, claim once, persist nonce/payload, dispatch and recover without a fresh debit. |
-| Settlement reconciler | Durable operation plus verified external evidence → ledger transition | Establish settlement or non-execution; retain uncertain exposure. |
-| Audit recorder | Decision and state transition → durable ordered event | Preserve policy provenance, explanations, and evidence references. |
+| Engine                | Input and output                                                                            | Responsibility                                                                                  |
+| --------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Request boundary      | Credentials and wire intent → trusted principal and canonical intent                        | Authenticate, resolve delegation ownership, validate shape and limits, compute digest.          |
+| Hard-policy engine    | Canonical intent, policy snapshot and budget state → prohibitions and approval requirements | Enforce transaction, recipient, network, capability and budget restrictions.                    |
+| Behavior engine       | Operational window, active baseline and current intent → versioned signals                  | Compute velocity, amount deviation and recipient familiarity deterministically.                 |
+| Authority engine      | Signals and persisted state → tighter state and autonomous allowance                        | Apply precedence, restrictions, cooldowns and explicit recovery rules.                          |
+| Reservation ledger    | Scoped debit and all budget accounts → hold or denial                                       | Atomically check headroom, persist allocations, commit verified spend and safely release holds. |
+| Approval broker       | Pending reservation → authenticated, bound approval record                                  | Durable notification, expiry, approver authorization, duplicate handling and revalidation.      |
+| Execution coordinator | Reservation ID → stable execution operation                                                 | Revalidate, claim once, persist nonce/payload, dispatch and recover without a fresh debit.      |
+| Settlement reconciler | Durable operation plus verified external evidence → ledger transition                       | Establish settlement or non-execution; retain uncertain exposure.                               |
+| Audit recorder        | Decision and state transition → durable ordered event                                       | Preserve policy provenance, explanations, and evidence references.                              |
 
 The SDK exposes proposed `authorize`, `execute` and `getStatus` methods. Approval, recovery and policy administration have separate authenticated APIs. The agent-facing SDK has no `release`, `commit` or raw-signing method.
 
@@ -177,20 +177,20 @@ This is a proposed, reproducible demonstration profile named `adaptive-demo-v1`.
 
 ### Configuration
 
-| Setting | Example value |
-|---|---|
-| Unit | Six-decimal mock token; $1 in examples means 1,000,000 atomic units |
-| Hard transaction ceiling | $20 |
-| Hard rolling 24-hour wallet budget | $100, also checked alongside any agent/delegation budgets |
-| Normal autonomous ceiling | $10 |
-| Restricted autonomous ceiling | $2 |
-| Cold-start autonomous ceiling | $1 and owner-vetted recipient only |
-| Pending approvals | Maximum 3 per agent and 10 per wallet; their full holds consume hard budget |
-| Approval expiry | 5 minutes or earlier intent/delegation expiry |
-| Payment validity | At most 60 seconds, bounded by the remaining intent/delegation validity |
-| Velocity window | (now - 60 seconds, now], including the candidate once |
-| Baseline sample requirements | At least 20 owner-reviewed eligible observations; use the last 100 accepted observations |
-| Recovery cooldown | 15 minutes without MEDIUM/HIGH/CRITICAL evidence or open incidents |
+| Setting                            | Example value                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------------- |
+| Unit                               | Six-decimal mock token; $1 in examples means 1,000,000 atomic units                      |
+| Hard transaction ceiling           | $20                                                                                      |
+| Hard rolling 24-hour wallet budget | $100, also checked alongside any agent/delegation budgets                                |
+| Normal autonomous ceiling          | $10                                                                                      |
+| Restricted autonomous ceiling      | $2                                                                                       |
+| Cold-start autonomous ceiling      | $1 and owner-vetted recipient only                                                       |
+| Pending approvals                  | Maximum 3 per agent and 10 per wallet; their full holds consume hard budget              |
+| Approval expiry                    | 5 minutes or earlier intent/delegation expiry                                            |
+| Payment validity                   | At most 60 seconds, bounded by the remaining intent/delegation validity                  |
+| Velocity window                    | (now - 60 seconds, now], including the candidate once                                    |
+| Baseline sample requirements       | At least 20 owner-reviewed eligible observations; use the last 100 accepted observations |
+| Recovery cooldown                  | 15 minutes without MEDIUM/HIGH/CRITICAL evidence or open incidents                       |
 
 Request expiry is clamped by server policy. Approval expiry, intent expiry and payment-signature expiry are distinct fields. The signer never extends validity on a retry.
 
@@ -206,10 +206,10 @@ Version 1 uses an immutable active baseline version, promoted by an operator fro
 
 All money calculations use integers. Ratios are evaluated by cross-multiplication, not lossy conversion of large `bigint` values to JavaScript `number`.
 
-| Signal | Deterministic rule |
-|---|---|
-| Velocity | Candidate-inclusive count in 60 seconds: 0–5 → NONE; 6–10 → MEDIUM; 11 or more → HIGH. |
-| Amount deviation | Let m be the lower median of accepted baseline amounts; d = max(lower median absolute deviation, 100,000 atomic units). If amount > m + 6d → HIGH; else if amount > m + 3d → MEDIUM; otherwise NONE. |
+| Signal                | Deterministic rule                                                                                                                                                                                             |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Velocity              | Candidate-inclusive count in 60 seconds: 0–5 → NONE; 6–10 → MEDIUM; 11 or more → HIGH.                                                                                                                         |
+| Amount deviation      | Let m be the lower median of accepted baseline amounts; d = max(lower median absolute deviation, 100,000 atomic units). If amount > m + 6d → HIGH; else if amount > m + 3d → MEDIUM; otherwise NONE.           |
 | Recipient familiarity | Recipient forbidden by hard policy → DENY. Otherwise a recipient absent from the owner-vetted set → HIGH and eligible approval if configured. A one-off approval does not add the recipient to the vetted set. |
 
 With fewer than 20 baseline observations, amount deviation returns `INSUFFICIENT_HISTORY`, not NONE. The cold-start allowance applies regardless of the named authority state. Velocity and recipient checks still run.
@@ -266,7 +266,7 @@ interface PaymentIntentWire {
   schemaVersion: "1";
   idempotencyKey: string;
   delegationId: string; // selected by caller, verified against credentials
-  taskId?: string;      // optional owner-issued task, never a fresh budget root
+  taskId?: string; // optional owner-issued task, never a fresh budget root
   network: string;
   asset: string;
   amountAtomic: string; // canonical positive base-10 integer, no exponent/sign
@@ -288,8 +288,13 @@ interface TrustedScope {
 }
 
 type ReservationState =
-  | "PENDING_APPROVAL" | "RESERVED" | "EXECUTING"
-  | "PENDING_RECONCILIATION" | "COMMITTED" | "RELEASED" | "EXPIRED";
+  | "PENDING_APPROVAL"
+  | "RESERVED"
+  | "EXECUTING"
+  | "PENDING_RECONCILIATION"
+  | "COMMITTED"
+  | "RELEASED"
+  | "EXPIRED";
 
 type Decision =
   | { kind: "DENY"; decisionId: string; reasonCodes: string[] }
@@ -316,14 +321,14 @@ Idempotency uniqueness is `(ownerId, walletId, agentId, delegationId, idempotenc
 
 ### Proposed endpoints
 
-| Caller | Operation | Effect |
-|---|---|---|
-| Agent | `authorize(intent)` | Decision and optional reservation; no signing. |
-| Agent | `execute(reservationId)` | Claim or return existing execution status; caller cannot replace the payload. |
-| Agent | `getStatus(id)` | Read only records within authenticated scope. |
-| Approver | `decideApproval(id, response)` | Authenticated one-operation approval or rejection. |
-| Operator | `freeze`, `recover`, `activatePolicy` | Separate administration permissions and audit records. |
-| Internal worker | `reconcile(executionId)` | Verify evidence and apply idempotent ledger transitions. |
+| Caller          | Operation                             | Effect                                                                        |
+| --------------- | ------------------------------------- | ----------------------------------------------------------------------------- |
+| Agent           | `authorize(intent)`                   | Decision and optional reservation; no signing.                                |
+| Agent           | `execute(reservationId)`              | Claim or return existing execution status; caller cannot replace the payload. |
+| Agent           | `getStatus(id)`                       | Read only records within authenticated scope.                                 |
+| Approver        | `decideApproval(id, response)`        | Authenticated one-operation approval or rejection.                            |
+| Operator        | `freeze`, `recover`, `activatePolicy` | Separate administration permissions and audit records.                        |
+| Internal worker | `reconcile(executionId)`              | Verify evidence and apply idempotent ledger transitions.                      |
 
 ## 8. Authorization algorithm
 
@@ -335,7 +340,7 @@ async function authorize(raw: unknown, credentials: Credentials) {
   const validated = validateWireIntent(raw);
   // Malformed authenticated attempts go to separate bounded ingress counters.
 
-  return store.transaction(async tx => {
+  return store.transaction(async (tx) => {
     const now = tx.trustedNow();
     const scope = await tx.resolveOwnedDelegation(principal, validated);
     const intent = canonicalize(scope, validated);
@@ -361,9 +366,7 @@ async function authorize(raw: unknown, credentials: Credentials) {
       return tx.persistDenialAndAuthority(intent, hard, authority);
     }
 
-    const signals = snapshot.policy.adaptive.enabled
-      ? evaluateSignals(intent, snapshot)
-      : [];
+    const signals = snapshot.policy.adaptive.enabled ? evaluateSignals(intent, snapshot) : [];
     authority = tightenAuthority(authority, signals);
     await tx.persistAuthority(authority);
 
@@ -374,12 +377,22 @@ async function authorize(raw: unknown, credentials: Credentials) {
 
     // Returns a typed denial rather than throwing for ordinary no-headroom.
     const hold = await tx.tryReserveAllApplicableBudgets({
-      scope, intent, authority, decision, now,
+      scope,
+      intent,
+      authority,
+      decision,
+      now,
     });
     if (!hold.accepted) return tx.persistDenial(intent, hold.reason);
 
     return tx.persistDecisionReservationApprovalAndOutbox({
-      scope, intent, digest, decision, authority, hold, snapshot,
+      scope,
+      intent,
+      digest,
+      decision,
+      authority,
+      hold,
+      snapshot,
     });
   });
 }
@@ -551,21 +564,21 @@ The [technology decision record](technology-decisions.md#1-why-sqlite-first-rath
 
 ### Tables and ownership
 
-| Logical table | Important fields or constraints |
-|---|---|
-| `policies` | Immutable digest/version, owner, active pointer, approval and hard rules |
-| `delegations` | Owner/wallet/agent binding, permitted scope, expiry and revocation revision |
-| `authority_states` | Protected principal scope, state, revision, entry time, recovery counters |
-| `budget_accounts` | Scope hierarchy, network/asset, rolling window, hard ceiling and revision |
-| `payment_intents` | Scoped unique idempotency key, canonical digest and immutable request |
-| `reservations` | Intent binding, lifecycle state, maximum debit and expiry |
-| `reservation_allocations` | Hold membership in every applicable budget account |
-| `execution_attempts` | One execution per reservation, fixed nonce/payload, lease/fence and evidence refs |
-| `approvals` | Bound request, allowed responder set, revision, expiry and response |
-| `behavior_features` | Operational counters and consistent event cursor; no cross-tenant lookups |
-| `baseline_versions` | Reviewed observation provenance, immutable statistics and algorithm version |
-| `decision_events` | Ordered durable decisions, transition evidence and protected audit payload |
-| `outbox_events` | Unique event ID, payload/ref, delivery state and retry metadata |
+| Logical table             | Important fields or constraints                                                   |
+| ------------------------- | --------------------------------------------------------------------------------- |
+| `policies`                | Immutable digest/version, owner, active pointer, approval and hard rules          |
+| `delegations`             | Owner/wallet/agent binding, permitted scope, expiry and revocation revision       |
+| `authority_states`        | Protected principal scope, state, revision, entry time, recovery counters         |
+| `budget_accounts`         | Scope hierarchy, network/asset, rolling window, hard ceiling and revision         |
+| `payment_intents`         | Scoped unique idempotency key, canonical digest and immutable request             |
+| `reservations`            | Intent binding, lifecycle state, maximum debit and expiry                         |
+| `reservation_allocations` | Hold membership in every applicable budget account                                |
+| `execution_attempts`      | One execution per reservation, fixed nonce/payload, lease/fence and evidence refs |
+| `approvals`               | Bound request, allowed responder set, revision, expiry and response               |
+| `behavior_features`       | Operational counters and consistent event cursor; no cross-tenant lookups         |
+| `baseline_versions`       | Reviewed observation provenance, immutable statistics and algorithm version       |
+| `decision_events`         | Ordered durable decisions, transition evidence and protected audit payload        |
+| `outbox_events`           | Unique event ID, payload/ref, delivery state and retry metadata                   |
 
 The list describes logical responsibilities, not a finalized migration. Storage must preserve all uniqueness and transaction requirements even if some tables are combined.
 
@@ -587,20 +600,20 @@ Version 1 is a single-host reference deployment. Independent SQLite copies must 
 
 ## 13. Authorization guards
 
-| Order or boundary | Guard | Failure outcome |
-|---|---|---|
-| Ingress | Caller authentication, body size, input schema and rate limit | Reject without attributing activity to an unauthenticated victim |
-| Scope | Credential-bound owner, wallet, agent and delegation | Deny cross-scope access |
-| Idempotency | Scoped key and canonical digest | Return current historical status or record conflict |
-| Hard policy | Allowed network/asset/scheme/recipient, expiry and absolute ceilings | Deny; never override through approval |
-| Behavior | Candidate-inclusive operational window, versioned baseline and insufficient-history rules | Tighten state/allowance or require approval |
-| Budget | Every ancestor's committed spend plus all live holds | Atomic hold or typed denial |
-| Approval | Exact binding, permitted responder, expiry, current policy and authority revisions | Reject stale/forged response; do not sign |
-| Execution | Ownership, current policy, authority, approval and unique execution claim | No new operation on denial or duplicate |
-| Signer | Persisted exact payload, stable nonce, domain and signer binding | Refuse changed payload |
-| Settlement | Validated matching evidence, finality and non-redeemability | Commit, verified release, or retain uncertainty |
-| Recovery | Separate permission or explicit qualified cooldown rule | No implicit recovery from a payment approval |
-| Audit | Transactionally durable event, stable encoding, policy and evidence references | Explain decisions and reconstruct known operations; no administrator-tampering guarantee |
+| Order or boundary | Guard                                                                                     | Failure outcome                                                                          |
+| ----------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Ingress           | Caller authentication, body size, input schema and rate limit                             | Reject without attributing activity to an unauthenticated victim                         |
+| Scope             | Credential-bound owner, wallet, agent and delegation                                      | Deny cross-scope access                                                                  |
+| Idempotency       | Scoped key and canonical digest                                                           | Return current historical status or record conflict                                      |
+| Hard policy       | Allowed network/asset/scheme/recipient, expiry and absolute ceilings                      | Deny; never override through approval                                                    |
+| Behavior          | Candidate-inclusive operational window, versioned baseline and insufficient-history rules | Tighten state/allowance or require approval                                              |
+| Budget            | Every ancestor's committed spend plus all live holds                                      | Atomic hold or typed denial                                                              |
+| Approval          | Exact binding, permitted responder, expiry, current policy and authority revisions        | Reject stale/forged response; do not sign                                                |
+| Execution         | Ownership, current policy, authority, approval and unique execution claim                 | No new operation on denial or duplicate                                                  |
+| Signer            | Persisted exact payload, stable nonce, domain and signer binding                          | Refuse changed payload                                                                   |
+| Settlement        | Validated matching evidence, finality and non-redeemability                               | Commit, verified release, or retain uncertainty                                          |
+| Recovery          | Separate permission or explicit qualified cooldown rule                                   | No implicit recovery from a payment approval                                             |
+| Audit             | Transactionally durable event, stable encoding, policy and evidence references            | Explain decisions and reconstruct known operations; no administrator-tampering guarantee |
 
 ## 14. Decision records and audit boundaries
 
@@ -614,55 +627,55 @@ Behavior calculations use indexed time windows and stored aggregates. Audit stor
 
 ## 15. Failure handling
 
-| Failure | Required handling |
-|---|---|
-| Duplicate agent HTTP request | Return current status; no duplicate hold, logical-attempt count or payment nonce |
-| Cross-scope record lookup | Deny before disclosing whether another scope's record exists |
-| Unavailable policy/store or inconsistent critical features | Reject new authorization/execution; do not sign |
-| Insufficient budget or approval capacity | Persist typed denial and any justified restriction; no hold |
-| SQLite contention | Bounded retry of the transaction, then explicit unavailable status |
-| Crash after approval reservation commit | Outbox redelivers the same approval event |
-| Approval races with timeout | One state transition wins; stale result cannot revive the hold |
-| Crash after execution claim | Sweeper finds durable operation and reconciles/retries the same nonce only |
-| Signature returned but process crashes before saving it | Inspect or retry exact fixed message; never allocate a replacement nonce |
-| Application error after payment | Commit verified debit independently of fulfillment status |
-| Provider reports failure but authorization remains usable | Hold and reconcile; do not release from the failed attempt alone |
-| Freeze during approval or execution | Block claims after freeze; retain earlier potentially issued exposure |
-| New policy lowers limit below exposure | Zero new headroom; cancel unclaimed stale-policy holds, retain claimed exposure |
-| Audit export or approval channel unavailable | Retry durable events; no automatic payment or authority recovery |
-| Database restored from stale backup | Pause new spending until outstanding operation history is reconciled |
+| Failure                                                    | Required handling                                                                |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| Duplicate agent HTTP request                               | Return current status; no duplicate hold, logical-attempt count or payment nonce |
+| Cross-scope record lookup                                  | Deny before disclosing whether another scope's record exists                     |
+| Unavailable policy/store or inconsistent critical features | Reject new authorization/execution; do not sign                                  |
+| Insufficient budget or approval capacity                   | Persist typed denial and any justified restriction; no hold                      |
+| SQLite contention                                          | Bounded retry of the transaction, then explicit unavailable status               |
+| Crash after approval reservation commit                    | Outbox redelivers the same approval event                                        |
+| Approval races with timeout                                | One state transition wins; stale result cannot revive the hold                   |
+| Crash after execution claim                                | Sweeper finds durable operation and reconciles/retries the same nonce only       |
+| Signature returned but process crashes before saving it    | Inspect or retry exact fixed message; never allocate a replacement nonce         |
+| Application error after payment                            | Commit verified debit independently of fulfillment status                        |
+| Provider reports failure but authorization remains usable  | Hold and reconcile; do not release from the failed attempt alone                 |
+| Freeze during approval or execution                        | Block claims after freeze; retain earlier potentially issued exposure            |
+| New policy lowers limit below exposure                     | Zero new headroom; cancel unclaimed stale-policy holds, retain claimed exposure  |
+| Audit export or approval channel unavailable               | Retry durable events; no automatic payment or authority recovery                 |
+| Database restored from stale backup                        | Pause new spending until outstanding operation history is reconciled             |
 
 ## 16. Scenarios and expected results
 
 Use fixed clocks, versioned fixtures and a durable mock provider ledger. Every case should assert financial balances, state transitions, reason codes and external payment identities, not only the returned decision.
 
-| ID | Scenario | Required result |
-|---|---|---|
-| S01 | Mature agent makes a familiar, normal $1 purchase | Reserve → claim → verified commit; one nonce and one debit |
-| S02 | Same scoped key and same intent retried | Same intent and current status; no new logical attempt or hold |
-| S03 | Same scoped key reused for a changed amount | Conflict; no signing; authenticated incident count updated |
-| S04 | Different principal guesses a reservation ID | No record disclosure or mutation |
-| S05 | Two workers execute the same reservation concurrently | One claim and one debit identity; other worker returns existing status |
-| S06 | Several requests race for the last $5 of a shared wallet budget | All scopes serialize against the shared account; total newly admitted holds fit |
-| S07 | Agent creates another task or delegation | Cannot reset wallet budget or protected agent authority |
-| S08 | A hold survives past a 24-hour window boundary | Still counted while live; rollover never frees outstanding exposure |
-| S09 | Sixth then eleventh distinct normal request in 60 seconds | Restricted on sixth; approval required on eleventh under reference profile |
-| S10 | Unknown recipient introduced through prompt injection | Hard-deny if forbidden; otherwise approval; text cannot override guards |
-| S11 | Human approves one $8 request while agent is restricted | Only that operation can proceed; agent remains restricted |
-| S12 | Operator freezes agent while human approval is pending | Late approval cannot authorize execution |
-| S13 | Freeze commits before execution claim | Claim denied; no signer invocation |
-| S14 | Freeze commits after claim/signature issuance | Potential debit remains held; no promise of recalling issued authorization |
-| S15 | Adapter times out after submitting payment | Pending reconciliation; no fresh nonce and no released budget |
-| S16 | Paid resource returns an error after successful payment | Debit remains committed; fulfillment failure recorded separately |
-| S17 | Approval expires as another worker approves it | One atomic winner; no expired hold is revived |
-| S18 | Attempted unlimited approval or arbitrary contract call | Unsupported capability denied before signing |
-| S19 | Slow escalation or poisoned training candidates | Active baseline cannot auto-drift; measure false negatives rather than claiming complete prevention |
-| S20 | Attacker floods pending approvals | Agent and wallet count/value bounds plus rate limits contain resource use |
-| S21 | New policy invalidates an old unclaimed authorization | Historical decision remains visible; execute fails and requires new request |
-| S22 | Process dies after any persistent or external boundary | Recovery follows stored operation without duplicate debit or unjustified release |
-| S23 | Forged settlement failure from agent | Ignored as release authority; reconciliation requires validated evidence |
-| S24 | Operator lowers a budget below already incurred exposure | No negative accounting or retroactive erasure; zero new headroom |
-| S25 | Approval declined, human unavailable, or agent idle | No automatic freeze/recovery solely from these events |
+| ID  | Scenario                                                                        | Required result                                                                                                                             |
+| --- | ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| S01 | Mature agent makes a familiar, normal $1 purchase                               | Reserve → claim → verified commit; one nonce and one debit                                                                                  |
+| S02 | Same scoped key and same intent retried                                         | Same intent and current status; no new logical attempt or hold                                                                              |
+| S03 | Same scoped key reused for a changed amount                                     | Conflict; no signing; authenticated incident count updated                                                                                  |
+| S04 | Different principal guesses a reservation ID                                    | No record disclosure or mutation                                                                                                            |
+| S05 | Two workers execute the same reservation concurrently                           | One claim and one debit identity; other worker returns existing status                                                                      |
+| S06 | Several requests race for the last $5 of a shared wallet budget                 | All scopes serialize against the shared account; total newly admitted holds fit                                                             |
+| S07 | Agent creates another task or delegation                                        | Cannot reset wallet budget or protected agent authority                                                                                     |
+| S08 | A hold survives past a 24-hour window boundary                                  | Still counted while live; rollover never frees outstanding exposure                                                                         |
+| S09 | Sixth then eleventh distinct normal request in 60 seconds                       | Restricted on sixth; approval required on eleventh under reference profile                                                                  |
+| S10 | Unknown recipient introduced through prompt injection                           | Hard-deny if forbidden; otherwise approval; text cannot override guards                                                                     |
+| S11 | Human approves one $8 request while agent is restricted                         | Only that operation can proceed; agent remains restricted                                                                                   |
+| S12 | Operator freezes agent while human approval is pending                          | Late approval cannot authorize execution                                                                                                    |
+| S13 | Freeze commits before execution claim                                           | Claim denied; no signer invocation                                                                                                          |
+| S14 | Freeze commits after claim/signature issuance                                   | Potential debit remains held; no promise of recalling issued authorization                                                                  |
+| S15 | Adapter times out after submitting payment                                      | Pending reconciliation; no fresh nonce and no released budget                                                                               |
+| S16 | Paid resource returns an error after successful payment                         | Debit remains committed; fulfillment failure recorded separately                                                                            |
+| S17 | Approval expires as another worker approves it                                  | One atomic winner; no expired hold is revived                                                                                               |
+| S18 | Attempted unlimited approval or arbitrary contract call                         | Unsupported capability denied before signing                                                                                                |
+| S19 | Slow escalation or poisoned training candidates                                 | Active baseline cannot auto-drift; measure false negatives rather than claiming complete prevention                                         |
+| S20 | Attacker floods pending approvals                                               | Agent and wallet count/value bounds plus rate limits contain resource use                                                                   |
+| S21 | New policy invalidates an old unclaimed authorization                           | Historical decision remains visible; execute fails and requires new request                                                                 |
+| S22 | Process dies after any persistent or external boundary                          | Recovery follows stored operation without duplicate debit or unjustified release                                                            |
+| S23 | Forged settlement failure from agent                                            | Ignored as release authority; reconciliation requires validated evidence                                                                    |
+| S24 | Operator lowers a budget below already incurred exposure                        | No negative accounting or retroactive erasure; zero new headroom                                                                            |
+| S25 | Approval declined, human unavailable, or agent idle                             | No automatic freeze/recovery solely from these events                                                                                       |
 | S26 | Operator restores an old database backup or discovers missing operation history | Restore/recovery procedure pauses spending until reconciliation; arbitrary privileged tampering is not claimed to be automatically detected |
 
 Anomaly detection can miss malicious payments resembling normal purchases. Explicitly include those false-negative scenarios. The promised hard boundary is the configured policy and accounting invariant, not perfect knowledge of agent intent.
@@ -673,14 +686,14 @@ This is the canonical six-phase roadmap. Tests grow with each phase; signer isol
 
 The [Phase 0 development record](development/phase-0.md) is the canonical place for that phase's initial intent, detailed design, expected and actual outcomes, and verification evidence. Its toolchain uses Bun for package management, development execution, scripts, and tests, with separate TypeScript compiler checks. These are planned implementation choices, not installed capabilities.
 
-| Phase | Work | Acceptance gate |
-|---|---|---|
-| 0 — Contracts and static policy | Bun/TypeScript workspace, host-supplied trusted scope, exact wire/canonical types, immutable policies, CI and policy tests; MIT license already added | Hard denials and ownership boundaries have deterministic fixtures; no credential authentication, reservations or signing yet |
-| 1 — Ledger and execution safety | Memory/SQLite contract, shared budgets, scoped idempotency, unique execution claims, outbox and crash records | Real-store concurrency, rollover and duplicate-claim tests pass |
-| 2 — Mock x402 payment | Isolated gateway, restricted mock signer, exact adapter, reconciler and example | S01/S05/S13–S16/S22 prove one debit identity and retained uncertainty |
-| 3 — Durable approvals | Approval events, authenticated responses, pending caps, expiry and separate recovery APIs | S11/S12/S17/S20/S21/S25 pass with restarts and races |
-| 4 — Adaptive authority | Three signals, reviewed baseline versions, reference policy and qualified recovery | Worked trace, cold-start tests and deterministic state transitions pass |
-| 5 — Evaluation and adoption | Testkit, static comparisons, held-out scenarios, overhead measurements, one external sandbox/testnet adapter and contributor examples | Provider/network records reconcile with the ledger; evaluation and limitations reproducible; release docs match implemented behavior |
+| Phase                           | Work                                                                                                                                                  | Acceptance gate                                                                                                                      |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| 0 — Contracts and static policy | Bun/TypeScript workspace, host-supplied trusted scope, exact wire/canonical types, immutable policies, CI and policy tests; MIT license already added | Hard denials and ownership boundaries have deterministic fixtures; no credential authentication, reservations or signing yet         |
+| 1 — Ledger and execution safety | Memory/SQLite contract, shared budgets, scoped idempotency, unique execution claims, outbox and crash records                                         | Real-store concurrency, rollover and duplicate-claim tests pass                                                                      |
+| 2 — Mock x402 payment           | Isolated gateway, restricted mock signer, exact adapter, reconciler and example                                                                       | S01/S05/S13–S16/S22 prove one debit identity and retained uncertainty                                                                |
+| 3 — Durable approvals           | Approval events, authenticated responses, pending caps, expiry and separate recovery APIs                                                             | S11/S12/S17/S20/S21/S25 pass with restarts and races                                                                                 |
+| 4 — Adaptive authority          | Three signals, reviewed baseline versions, reference policy and qualified recovery                                                                    | Worked trace, cold-start tests and deterministic state transitions pass                                                              |
+| 5 — Evaluation and adoption     | Testkit, static comparisons, held-out scenarios, overhead measurements, one external sandbox/testnet adapter and contributor examples                 | Provider/network records reconcile with the ledger; evaluation and limitations reproducible; release docs match implemented behavior |
 
 Select the external integration only after confirming access, sandbox/testnet support, debit bounds, retry semantics, credential isolation, status lookup and evidence/finality requirements. It validates the payment boundary; it does not replace mock fault injection or durable-store tests. Adaptation remains required for the first complete release even though adopters may disable it.
 

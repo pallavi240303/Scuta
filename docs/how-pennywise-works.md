@@ -2,7 +2,7 @@
 
 > Adaptively authorize agent transactions using observed behavior and financial exposure, while enforcing owner-defined limits and accounting for unresolved payments.
 
-**Status:** design only; implementation has not started. TypeScript is the product language and Bun the development toolchain. The following are requirements, not established guarantees.
+**Status:** Phase 0 static core implemented; see the [development record](development/phase-0.md) for evidence. TypeScript is the product language and Bun the development toolchain. The complete authorization lifecycle below remains a design: no live budget, signer, approvals or adaptive enforcement exists yet.
 
 [Engineering contract](core-authorization-design.md) · [Technology decisions](technology-decisions.md) · [Phase 0 record](development/phase-0.md) · [Contributing](../CONTRIBUTING.md)
 
@@ -10,14 +10,14 @@
 
 Give autonomous agents useful spending freedom while containing unwanted spending from runaway or compromised agents. Developers integrate the payment lifecycle; owners get shared-budget controls; operators get precise approvals and explanations; contributors get repeatable policy tests.
 
-| Goal | Required evidence |
-|---|---|
-| Enforce owner limits | Agent/adaptive engine cannot override caps or prohibited destinations; concurrent reservations fit shared budgets |
-| Account for exposure | Pending/uncertain payments remain counted; retries do not create another hold or debit identity |
-| Adapt authority | Defined signals tighten autonomous allowances or approval requirements; restrictions survive restart |
-| Make approval precise | Consent binds one purchase, expires, respects hard limits, and does not restore general authority |
-| Preserve useful autonomy | Routine tasks can complete without unnecessary approval; recovery follows explicit qualifications |
-| Explain and test decisions | Reasons, policy versions, exposure and authority are recorded; scenarios reproduce outcomes |
+| Goal                       | Required evidence                                                                                                 |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Enforce owner limits       | Agent/adaptive engine cannot override caps or prohibited destinations; concurrent reservations fit shared budgets |
+| Account for exposure       | Pending/uncertain payments remain counted; retries do not create another hold or debit identity                   |
+| Adapt authority            | Defined signals tighten autonomous allowances or approval requirements; restrictions survive restart              |
+| Make approval precise      | Consent binds one purchase, expires, respects hard limits, and does not restore general authority                 |
+| Preserve useful autonomy   | Routine tasks can complete without unnecessary approval; recovery follows explicit qualifications                 |
+| Explain and test decisions | Reasons, policy versions, exposure and authority are recorded; scenarios reproduce outcomes                       |
 
 The research question is whether behavior-adaptive restrictions and controlled recovery reduce harmful spending **under the same hard limits** without unacceptable task failures or approval workload compared with strong static controls. This is not a claim of uniqueness or proven superiority.
 
@@ -135,14 +135,14 @@ stateDiagram-v2
 
 Illustrative reference settings—not validated safe defaults:
 
-| Condition | Effect |
-|---|---|
-| Mature agent, normal activity | $10 autonomous allowance, $20 hard transaction ceiling, $100 rolling budget |
-| Sixth distinct request in 60 seconds | `RESTRICTED`; autonomous ceiling becomes $2 |
-| Eleventh distinct request in 60 seconds | `APPROVAL_REQUIRED`; every eligible purchase needs approval |
-| Forbidden recipient or $21 purchase | Hard denial regardless of approval |
-| Critical scoped incident or operator freeze | Block new execution claims |
-| Insufficient baseline history | $1 cold-start allowance and vetted recipients only |
+| Condition                                   | Effect                                                                      |
+| ------------------------------------------- | --------------------------------------------------------------------------- |
+| Mature agent, normal activity               | $10 autonomous allowance, $20 hard transaction ceiling, $100 rolling budget |
+| Sixth distinct request in 60 seconds        | `RESTRICTED`; autonomous ceiling becomes $2                                 |
+| Eleventh distinct request in 60 seconds     | `APPROVAL_REQUIRED`; every eligible purchase needs approval                 |
+| Forbidden recipient or $21 purchase         | Hard denial regardless of approval                                          |
+| Critical scoped incident or operator freeze | Block new execution claims                                                  |
+| Insufficient baseline history               | $1 cold-start allowance and vetted recipients only                          |
 
 An eligible $8 purchase in `RESTRICTED` needs approval; approval leaves the restriction unchanged. A valid retry does not add logical velocity.
 
