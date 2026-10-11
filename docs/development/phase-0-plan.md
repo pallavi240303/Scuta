@@ -1,4 +1,4 @@
-# PennyWise Phase 0 Implementation Plan
+# Scuta Phase 0 Implementation Plan
 
 > **For agentic workers:** Use `superpowers:executing-plans` for native implementation, or `superpowers:subagent-driven-development` only if the maintainer chooses delegation. Complete tasks in order; checkboxes track this plan, not claimed implementation results.
 
@@ -77,7 +77,7 @@ Policy validation uses an internal zero-accepting parser for the autonomous limi
 
 **Interfaces:** Produce `ValidationError`, `ValidationCode`, `MAX_ATOMIC_AMOUNT`, the positive amount parser and serializer. Internal validation codes cover `INVALID_TYPE`, `INVALID_SHAPE`, `UNKNOWN_FIELD`, `INVALID_FORMAT`, `OUT_OF_RANGE` and `INCONSISTENT_POLICY`.
 
-- [ ] Configure the private `@pennywise/core` workspace with strict TypeScript, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, separate source/test checking, and exact tool versions. Install using Bun and verify declared peer compatibility; do not upgrade silently if tools fail.
+- [ ] Configure the private `@scuta/core` workspace with strict TypeScript, `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, separate source/test checking, and exact tool versions. Install using Bun and verify declared peer compatibility; do not upgrade silently if tools fail.
 - [ ] Write `amount.test.ts`: `parseAtomicAmount("9007199254740993") === 9007199254740993n`; minimum `"1"`; max round trip; max+1 and `"0"`, `"-1"`, `"+1"`, `"1.0"`, `"1e6"`, `" 1"`, `"01"`, 79-digit input and numeric values throw typed errors. Serializer rejects zero, negative and out-of-range values.
 - [ ] Run `bun test packages/core/src/amount.test.ts`; record failure from missing behavior, not a broken test dependency.
 - [ ] Implement the guards/parser/serializer with length checks before `BigInt` conversion; add error shape/redaction assertions in `validation.test.ts`.
@@ -150,7 +150,7 @@ Reason precedence: `SCOPE_MISMATCH`, `DELEGATION_REVOKED`, `DELEGATION_EXPIRED`,
 
 **Files:** `apps/example/package.json`, `src/static-policy-demo.ts`, matching test; `scripts/verify-built-package.ts`, matching test; `scripts/coverage-preload.ts`; `.github/workflows/check.yml`; finish root scripts/config; update README, CONTRIBUTING, technology decisions and `phase-0.md` actual results.
 
-**Interfaces:** Example imports `@pennywise/core`; build outputs `packages/core/dist/index.js` and declarations via `tsc`. The workspace export points to built files; development tests use explicit source imports, no consumer path aliases. The smoke check imports the built public entry, evaluates fixtures, and fails on missing exports/incorrect result.
+**Interfaces:** Example imports `@scuta/core`; build outputs `packages/core/dist/index.js` and declarations via `tsc`. The workspace export points to built files; development tests use explicit source imports, no consumer path aliases. The smoke check imports the built public entry, evaluates fixtures, and fails on missing exports/incorrect result.
 
 - [ ] Write demo/smoke tests: fixture results are ALLOW, REQUIRE_APPROVAL and DENY in fixed order, with reason/provenance and no payment identifiers; smoke test fails when the built entry is absent. Run and confirm red.
 - [ ] Implement the no-network demo/build/smoke check. Cover the spec's install/test/watch/coverage/typecheck/lint/format/build/demo/check commands; add `bun run smoke`. Watch is interactive; verify startup then stop it, not leave it running.

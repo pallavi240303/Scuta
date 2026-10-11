@@ -1,4 +1,4 @@
-# PennyWise — Goals and Flow
+# Scuta — Goals and Flow
 
 > Adaptively authorize agent transactions using observed behavior and financial exposure, while enforcing owner-defined limits and accounting for unresolved payments.
 
@@ -29,7 +29,7 @@ The research question is whether behavior-adaptive restrictions and controlled r
 2. **Autonomous allowance:** may this agent make that purchase without approval under its current authority?
 3. **Approval eligibility:** may a permitted human approve this exact purchase inside the hard limits?
 
-The wallet manages funds and signing. PennyWise controls access to that authority and accounts for the outcome; it does not decide what the agent should buy.
+The wallet manages funds and signing. Scuta controls access to that authority and accounts for the outcome; it does not decide what the agent should buy.
 
 ## 3. Architecture and integration boundary
 
@@ -37,20 +37,20 @@ One gateway with internal modules, one authoritative SQLite store, and restricte
 
 ```mermaid
 flowchart LR
-    agent["Agent and SDK"] -->|"Propose or execute"| pennywise["PennyWise gateway"]
-    owner["Owner or approver"] -->|"Policy and approval"| pennywise
-    pennywise -->|"Read and persist"| store[("SQLite")]
-    pennywise -->|"Validated execution"| signer["Restricted signer"]
+    agent["Agent and SDK"] -->|"Propose or execute"| scuta["Scuta gateway"]
+    owner["Owner or approver"] -->|"Policy and approval"| scuta
+    scuta -->|"Read and persist"| store[("SQLite")]
+    scuta -->|"Validated execution"| signer["Restricted signer"]
     signer -->|"Fixed authorization"| adapter["Payment adapter"]
     adapter -->|"Submit payment"| provider["Payment infrastructure"]
-    provider -.->|"Settlement evidence"| pennywise
+    provider -.->|"Settlement evidence"| scuta
 ```
 
 The adapter and signer belong to the trusted service. Owners administer policy/delegation; approvers receive only their assigned permissions. Agents receive scoped decisions/status, never unrestricted payment credentials or database access.
 
 Gateway enforcement requires exclusive execution credentials and no agent-accessible bypass. Embedded use is only a guardrail when host code can call the signer directly. Gateway/administrator/provider/host compromise is outside the threat model.
 
-The first example is mock x402 `exact`/EIP-3009, one configured asset/network, with no real funds. A hosted wallet is a possible execution adapter—not a replacement for PennyWise's controller. No provider is selected. The core must not depend on provider SDK objects; adapters must supply bounded debit, stable retry identity and verifiable settlement/non-execution evidence. Universal wallet compatibility is not promised.
+The first example is mock x402 `exact`/EIP-3009, one configured asset/network, with no real funds. A hosted wallet is a possible execution adapter—not a replacement for Scuta's controller. No provider is selected. The core must not depend on provider SDK objects; adapters must supply bounded debit, stable retry identity and verifiable settlement/non-execution evidence. Universal wallet compatibility is not promised.
 
 SQLite serves the single-host reference; memory is test-only. PostgreSQL is an alternative for a shared database across gateway hosts, not an automatic upgrade or a promised extra adapter. See [the database rationale](technology-decisions.md#1-why-sqlite-first-rather-than-postgresql).
 

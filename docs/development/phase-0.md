@@ -1,8 +1,8 @@
-# PennyWise Phase 0 — Development Record
+# Scuta Phase 0 — Development Record
 
 Status: Phase 0 complete; locally verified and independently reviewed. Updated 11 October 2026.
 
-[How PennyWise works](../how-pennywise-works.md) · [Architecture](../core-authorization-design.md) · [Contributing](../../CONTRIBUTING.md)
+[How Scuta works](../how-scuta-works.md) · [Architecture](../core-authorization-design.md) · [Contributing](../../CONTRIBUTING.md)
 
 [Implementation plan](phase-0-plan.md): approved contracts, six test-driven tasks, exact tool choices and verification gates. This file remains the only Phase 0 results record.
 
@@ -10,7 +10,7 @@ This is the single Phase 0 record: intent, expected outcome, design, tests, actu
 
 ## Initial thinking
 
-Establish predictable payment contracts and static rules before adding adaptation. Prove amount precision, delegation boundaries, hard-deny precedence and deterministic request binding without signing or stateful budget claims. This foundation serves the [fixed project goals](../how-pennywise-works.md#1-objective-and-success-criteria); a static evaluator alone is not the finished product.
+Establish predictable payment contracts and static rules before adding adaptation. Prove amount precision, delegation boundaries, hard-deny precedence and deterministic request binding without signing or stateful budget claims. This foundation serves the [fixed project goals](../how-scuta-works.md#1-objective-and-success-criteria); a static evaluator alone is not the finished product.
 
 Bun manages packages, execution, scripts and tests; TypeScript is the only product language. Avoid unnecessary Bun APIs in the pure core; cross-runtime compatibility is unverified until tested.
 
@@ -190,6 +190,12 @@ Lint now checks supported tags, parameter names, parameter descriptions and retu
 On 11 October 2026, the maintainer chose to keep GitHub Actions only and defer CodeRabbit until a later implementation milestone and public release of the repository. No specific milestone has been selected. The temporary CodeRabbit configuration and activation instructions were removed; README and CONTRIBUTING now describe the current CI-only setup.
 
 The existing `.github/workflows/check.yml`, product code, dependencies and lockfile remain unchanged. This cleanup makes no GitHub or CodeRabbit account changes and does not uninstall an App the maintainer may have authorized separately. Hosted CI still needs verification after commit/push.
+
+## Scuta rename
+
+The project is now named Scuta. Documentation, workspace names and the example import use the new name; the goals-and-flow document is now `how-scuta-works.md`. The existing `pennywise.intent.v1` and `pennywise.policy.v1` digest domains remain protocol identifiers, not branding: changing them would change transaction and policy bindings. This rename adds no authorization features and does not rename the Desktop directory or GitHub repository.
+
+Verification: frozen Bun installation, `bun run check`, `bun run demo` and `git diff --check` passed. The suite still discovers 11 test files and passes 249 tests with 497 assertions; all eight core sources are included in coverage. Known-answer digest tests and demo digests are unchanged. Existing tests have not been relocated.
 
 ## Decisions and deviations
 

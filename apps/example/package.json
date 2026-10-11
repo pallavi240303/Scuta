@@ -1,9 +1,9 @@
 {
-  "name": "@pennywise/example",
+  "name": "@scuta/example",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "dependencies": {
-    "@pennywise/core": "workspace:*"
+    "@scuta/core": "workspace:*"
   }
 }

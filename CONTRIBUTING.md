@@ -1,10 +1,22 @@
-# Contributing to PennyWise
+# Contributing to Scuta
 
-PennyWise has a tested Phase 0 static core and an [MIT license](LICENSE). The gateway, ledger, payment integration, human approval service and adaptive engine remain planned. Boundary tests, counterexamples and focused PRs are useful now. Discuss substantial semantic changes before starting them.
+Scuta is building behavior-adaptive authorization for agent payments, bounded by owner-defined limits and accurate financial exposure. Contributions should improve that goal, not expand the project into a general wallet or agent platform.
+
+## Scope and Current Priorities
+
+Every contribution must strengthen **authorization, exposure accounting, adaptive authority, approval safety, or verification**. Read the [goals and boundaries](docs/how-scuta-works.md) and [implementation roadmap](docs/core-authorization-design.md#17-implementation-phases) before proposing work.
+
+- **Implemented:** the TypeScript static-policy core, input validation, delegation checks and canonical binding. Current contributions can add boundary/regression tests, focused fixes, clearer contracts and accurate documentation.
+- **Next:** design the authoritative SQLite ledger, atomic budget holds, scoped retries and crash recovery. Discuss those contracts before implementation.
+- **Later:** isolated execution, the bounded x402 integration, durable approvals, deterministic adaptation and evaluation. Propose scenarios now; do not add later-phase infrastructure before its contracts are agreed.
+
+The initial reference release targets one gateway/store, one configured payment profile and one verified external sandbox/testnet integration. The pure core stays separate from storage, networking and provider SDKs.
+
+**Outside the initial scope:** custody infrastructure, trading, general agent orchestration, arbitrary contract calls/token allowances, bridging, cross-asset valuation, additional providers/assets/chains, dashboards, LLM-based authorization, automatic baseline promotion and multi-host deployment. Extra dependencies or integrations are not useful merely because they are available. See the [release boundaries](docs/core-authorization-design.md#19-deferred-scope-and-release-gates).
 
 ## Local Setup
 
-Use Bun **1.3.14**; dependencies are pinned in `package.json` and `bun.lock`:
+Use Bun **1.3.14** and the committed lockfile:
 
 ```sh
 bun install --frozen-lockfile
@@ -12,105 +24,55 @@ bun run check
 bun run demo
 ```
 
-`bun run check` builds the public package, checks formatting/lint/types, runs coverage tests with nonempty discovery and a complete core-source inventory, then verifies built exports. GitHub Actions runs the same command on push/PR; configuration is not evidence of a remote pass.
+Use `bun run test` or `bun run test:watch` during development, and `bun run format` for formatting. The demo uses mocks; no credentials or real funds are needed. See the [phase record](docs/development/phase-0.md) for scripts, evidence and limitations.
 
-Use `bun run test`, `bun run test:watch`, or `bun run test:coverage` for focused development. `bun test` can target individual source test files; build first when running consumer tests. Use `bun run format` to apply formatting and `bun run format:check` to check without changes. No real funds or credentials are needed.
+## Keep Issues and PRs Focused
 
-Read the [goals and flow](docs/how-pennywise-works.md), then the [engineering contract](docs/core-authorization-design.md). A contribution must strengthen authorization, exposure accounting, adaptation, approval safety, or their verification. Extra providers, infrastructure, or interfaces are not goals by themselves.
+For an issue or PR, explain:
 
-## Design Contract
+1. **Problem and scope:** who is affected, which project goal and development phase it serves.
+2. **Expected behavior:** a minimal reproduction for bugs, or a concrete scenario and acceptance criteria for proposals.
+3. **Safety impact:** affected contracts, [invariant IDs](docs/core-authorization-design.md#3-invariants) and [scenario IDs](docs/core-authorization-design.md#16-scenarios-and-expected-results), where relevant.
+4. **Evidence:** exact commands/results, compatibility impact and documentation updates; distinguish implemented behavior from plans.
 
-Security-relevant changes must name the affected [invariants](docs/core-authorization-design.md#3-invariants) and [scenarios](docs/core-authorization-design.md#16-scenarios-and-expected-results). In particular:
+Discuss changes to policy precedence, scope/binding, budget semantics, payment identity, approvals, recovery, finality or audit guarantees before coding. Dependency/deployment proposals must explain necessity, alternatives and operational cost using the [technology decisions](docs/technology-decisions.md).
 
-- Derive identity/delegation from trusted credentials; isolate all record access.
-- Reserve every applicable shared budget atomically; count pending and uncertain holds across window boundaries.
-- Keep scoped retries bound to one intent, execution identity, nonce, and immutable payload.
-- Revalidate current permission before execution; keep earlier potentially issued payments accounted for after a freeze.
-- Separate payment approval, authority recovery, and policy administration.
-- Persist decisions, reservations, authority updates, and durable events together.
-- Release executed holds only through verified reconciliation; agent reports and generic timeouts are insufficient.
-- Keep behavioral rules deterministic, with explicit cold starts and reviewed baseline versions.
+Keep branches and PRs small and single-purpose. Do not bundle unrelated cleanup or future-phase features. Narrow or defer proposals that cannot be tied to a project goal and an acceptance case. Update the existing phase record when behavior changes; do not create duplicate tracking documents.
 
-Enforcement assumes isolated, exclusive signer access. Embedded guardrails cannot protect against host code that bypasses them. Describe planned, tested, and deferred behavior separately.
+## Non-Negotiable Safety Rules
 
-## Where to Contribute
+These are design requirements, not a claim that all controls already exist:
 
-Use the [six-phase roadmap](docs/core-authorization-design.md#17-implementation-phases) for sequencing and acceptance gates. Start with [Phase 0](docs/development/phase-0.md); later phases should not introduce dependencies into the pure core.
+- Agents cannot rewrite owner policy, administer approvals/recovery or supply trusted settlement evidence. Adaptation and approval cannot override hard limits.
+- Preserve principal/delegation isolation, canonical purchase binding and scoped retry identity. A retry must not create another budget hold or payable operation.
+- Reserve all applicable budgets atomically; keep pending and uncertain payments counted across window rollover.
+- Revalidate current permission before execution. A freeze blocks new claims, but previously issued payments may still settle and remain exposure.
+- Bind approval to one exact purchase; payment consent, authority recovery and policy administration are separate permissions.
+- Release potentially executed holds only on verified non-execution/final non-redeemability, never merely on a timeout or an agent's failure report.
+- Commit financial state and durable events together. Keep behavioral rules deterministic, baselines versioned/reviewed, and recovery explicit.
 
-Suggested issue scopes—not already-created issues:
+A static `ALLOW` is not a reservation or permission to sign. Embedded checks can be bypassed by host code; enforcement requires an isolated, exclusive signing path. Do not claim zero loss, perfect compromise detection or production safety from mocks or coverage.
 
-| Task                                 | Acceptance evidence                                                                                 |
-| ------------------------------------ | --------------------------------------------------------------------------------------------------- |
-| Amount and canonicalization fixtures | Exact round trips; invalid forms rejected; every bound field changes the digest                     |
-| Scoped retry fixtures                | Cross-principal isolation; changed-intent conflict; no additional hold on a valid retry             |
-| Budget rollover and concurrency      | Live holds survive rollover; competing requests fit shared headroom                                 |
-| Approval/recovery review             | One-off approval preserves restriction; stale approval after freeze cannot execute                  |
-| Mock signer contract                 | Fixed nonce/payload survives retries; changed payload and unauthorized caller fail                  |
-| Adaptive trace                       | Sixth/eleventh distinct requests match the reference policy; valid retries do not increase velocity |
-| Flow and evaluation review           | No signer bypass; lifecycle branches agree; claimed benefits have measurable evidence               |
+## Code and Test Standards
 
-Add Phase 0 cases as executable `*.test.ts` files. For later phases, propose concise scenario fixtures first and convert them to tests when those contracts are implemented. Phase 1 ledger design is the next implementation boundary, not an invitation to add a signer now.
+- Use TypeScript for product code, tests and examples; keep policy logic pure, with injected time/adapters and no provider SDK dependencies.
+- Use precise types, immutable validated values and explicit result unions. Keep `unknown` at validation boundaries; do not bypass checks with unsafe assertions.
+- Use bounded atomic-unit `bigint` internally and canonical decimal strings externally. Never use floating-point money.
+- Keep names clear. Add file overviews and meaningful function JSDoc (`@param`, `@returns`, relevant `@throws`); put concise JSDoc above types/interfaces, not between fields.
+- Keep dependencies pinned and include intentional `bun.lock` changes. Do not introduce another package-manager lockfile or weaken lint, types, runtime validation or coverage checks.
 
-## Propose Semantic Changes First
+Write failing tests before behavior changes. Test rejection paths and affected boundaries, not just successful decisions. Future stateful work needs real-store concurrency/restart tests, crash and replay cases, stale approvals and ambiguous outcomes—not mock-only evidence. Keep fixtures deterministic and logs redacted.
 
-Discuss changes to scope, digest fields, budget semantics, precedence, payment identity, approvals, baseline eligibility, recovery, finality, or audit guarantees. State the trigger, affected contracts/invariants, before/after behavior, retry/crash/concurrency/revocation implications, alternatives, compatibility cost, and a reproducible acceptance case.
-
-For dependencies or deployment changes, follow [Technology decisions](docs/technology-decisions.md): record the requirement, exact choice, alternative, operational cost, and evidence. Do not present an unselected tool as a standard.
-
-## Workflow and Code Standards
-
-Keep Bun, TypeScript and development dependencies pinned, and include intentional `bun.lock` updates. Do not add another package-manager lockfile or bypass runtime validation, strict type checking, JSDoc/naming checks or coverage inventory. The [verified scripts and evidence](docs/development/phase-0.md#scripts) describe the current baseline. No hosted issue tracker or private security-reporting channel is assumed to exist.
-
-Use focused branches and small PRs. Keep one phase record under `docs/development/` containing intent, expected/actual outcome, tests, exact verification evidence, decisions, and lessons. Record failures as well as passes; do not include sensitive logs. Add a root changelog when user-facing implementation changes exist.
-
-- TypeScript only for product code, tests, and examples; follow the [naming and JSDoc standards](docs/development/phase-0.md#coding-and-documentation-standards).
-- Document named functions with a clear summary, meaningful `@param`/`@returns` descriptions and relevant `@throws` conditions. Explain units, preconditions and side effects; do not duplicate TypeScript types or add empty tags.
-- Put concise JSDoc above each type/interface definition, including referenced types such as `TrustedScope`; do not add comments between its fields.
-- Use bounded atomic-unit `bigint` internally and canonical decimal strings externally; no floating-point money or monetary `number` conversions.
-- Validate external fields and reject unsupported capabilities. Use explicit result unions and immutable validated values.
-- Expose precise wire types to callers; keep `unknown` at runtime validation boundaries. Narrow GET/POST before accessing body fields rather than adding assertions or non-null operators.
-- Inject time and adapters; keep policy/behavior pure and network calls outside financial transactions.
-- Distinguish logical requests, reservations, executions, nonces, and delivery attempts.
-- Do not log credentials, reusable payment signatures, or sensitive unredacted bodies.
-
-## Required Verification
-
-Write failing tests before implementing behavior. Scale checks to the change; prose corrections do not require unrelated runtime tests.
-
-| Area                   | Required evidence                                                                                                                                                                                                     |
-| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Policy and identity    | Hard-deny precedence, owned delegation, per-scope access, immutable snapshots, canonical binding and current-state checks                                                                                             |
-| Ledger                 | Real persistent-store tests using separate connections/processes where relevant; overlapping scopes, competing claims, rollover, budget reductions and expiry races; assert balances and unique execution identities  |
-| Crashes and settlement | Failures before/after commit, claim, signing, signature persistence, submission and reconciliation; paid resource error; same-operation recovery or retained uncertainty, never release on lease expiry/timeout alone |
-| Approvals and recovery | Authenticated exact binding, expired/stale/forged/duplicate/conflicting responses, policy/freeze races, queue caps and redelivery; approval never recovers authority                                                  |
-| Behavior               | Exact reference thresholds, candidate-inclusive windows, insufficient history, baseline provenance, recovery qualifications and poisoning attempts; no automatic baseline promotion                                   |
-| Payment adapter        | Persisted financial fields/domain/validity/nonce, unauthorized signer access, replacement-field rejection, independently verified evidence, pinned protocol and finality assumptions                                  |
-
-EIP-3009 does not sign the resource URL or guarantee fulfillment; local purchase binding is separate. See the [reference adaptive policy](docs/core-authorization-design.md#6-reference-adaptive-policy) and [scenario catalogue](docs/core-authorization-design.md#16-scenarios-and-expected-results).
-
-Benchmark changes must use identical hard limits and accounting protections, with evaluation workloads held out from tuning. Report harmful spend, task completion, false blocks, approvals, recovery, unresolved exposure, and latency. Include legitimate drift, below-threshold attacks, poisoning, and defensive denial of service. State versions, seeds, sample units, hardware, and uncertainty; distinguish mocks from external integration results. Blocking everything is not success.
-
-## Pull-Request Checklist
-
-- [ ] One concrete problem; affected contracts, invariant IDs, and scenarios identified.
-- [ ] Proposed, implemented, and deferred behavior distinguished.
-- [ ] Exact amounts, scope, binding, shared budgets, replay, revocation, and uncertain outcomes preserved.
-- [ ] Approval and recovery remain separate.
-- [ ] Relevant checks actually run; commands and results recorded.
-- [ ] Documentation and diagrams agree; details live in their canonical document rather than being repeated.
-- [ ] No credentials, reusable signatures, or real funds included.
-- [ ] Contribution rights, MIT compatibility, and required third-party notices preserved.
-
-Seek independent review for security-critical changes where available; this need not block ordinary prose corrections.
+Benchmarks must use identical hard limits/accounting and held-out workloads; report harmful exposure, useful task completion, false blocks, approvals, recovery and latency. Blocking everything is not success. Detailed requirements live in the [scenario catalogue](docs/core-authorization-design.md#16-scenarios-and-expected-results) and [evaluation contract](docs/core-authorization-design.md#18-evaluation).
 
 ## Continuous Integration
 
-[GitHub Actions](.github/workflows/check.yml) runs `bun run check` on pushes and PRs: build, formatting, lint, types, tests, coverage inventory and built-package smoke verification. Run the same command locally before submitting a PR and include the results. A passing check does not establish production financial safety; security-critical changes still need focused tests and human review.
+[GitHub Actions](.github/workflows/check.yml) runs `bun run check`: build, formatting, lint, types, tests, coverage inventory and built-package smoke verification. Run it before code PRs and record the result. For documentation-only changes, check formatting, links and consistency; report exactly what was checked.
 
-CodeRabbit is deferred until the maintainer chooses a later implementation milestone and makes the repository public. No bot setup or credentials are required from contributors now. CI configuration alone does not prove a hosted pass or create branch protection.
+CI does not replace human review of security-critical changes. CodeRabbit remains deferred until a later implementation milestone and a public repository.
 
-## Security, Community, and License
+## Security and License
 
-Use simulated assets or explicitly authorized test environments; never target external funds or systems without permission. No private vulnerability-reporting channel is configured yet: establish one before executable public release and keep exploit details/secrets out of public discussions. Maintainers should publish a code of conduct and contact method as the community opens.
+Use mocks or explicitly authorized test environments; never test against external funds or systems without permission. Do not commit credentials, reusable signatures or sensitive payment data. A private vulnerability-reporting channel must be established before executable public release; do not publish sensitive exploit details in issues.
 
-Be specific and respectful; use traces and measurements to challenge assumptions, and document limitations and negative results. Submit only material you have the right to contribute, under [MIT](LICENSE), preserving applicable notices.
+Be specific and respectful. Contribute only work you have the right to share under [MIT](LICENSE), preserving required third-party notices.

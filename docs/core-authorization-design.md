@@ -1,10 +1,10 @@
-# PennyWise — Core Authorization Design
+# Scuta — Core Authorization Design
 
 **Status:** Complete-system design, revised 11 October 2026. Phase 0 implements only validated inputs, static evaluation and local digest binding; see the [development record](development/phase-0.md). The ledger, gateway, payment, approval and adaptive guarantees below are not implemented or proven yet.
 
 **Scope:** One TypeScript gateway and authoritative store, deterministic adaptive authority, durable approvals, a mock x402 profile, and one external sandbox/testnet integration before the first complete release. APIs below are proposed full-system contracts or pseudocode, not the Phase 0 public API; no hosted wallet provider is selected.
 
-[How PennyWise works](how-pennywise-works.md) · [Project overview](../README.md) · [Contribution guide](../CONTRIBUTING.md)
+[How Scuta works](how-scuta-works.md) · [Project overview](../README.md) · [Contribution guide](../CONTRIBUTING.md)
 
 ## Contents
 
@@ -31,7 +31,7 @@
 
 ## 1. Product and boundaries
 
-PennyWise adaptively authorizes agent transactions using observed behavior and financial exposure, while enforcing owner-defined limits and accounting for unresolved payments. This document specifies the implementation. The [goals and success criteria](how-pennywise-works.md#1-objective-and-success-criteria) define the fixed objective: contain unwanted spending while preserving useful autonomy.
+Scuta adaptively authorizes agent transactions using observed behavior and financial exposure, while enforcing owner-defined limits and accounting for unresolved payments. This document specifies the implementation. The [goals and success criteria](how-scuta-works.md#1-objective-and-success-criteria) define the fixed objective: contain unwanted spending while preserving useful autonomy.
 
 Every feature must strengthen authorization, exposure accounting, adaptation, approval safety, or evidence of those properties. Wallet/provider choice is infrastructure, not a change to this objective.
 

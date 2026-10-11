@@ -1,6 +1,6 @@
-# PennyWise — Technology Decisions
+# Scuta — Technology Decisions
 
-Updated 11 October 2026. Phase 0 tooling, validation and hashing are implemented; storage, gateway and payment choices remain designs. No performance benefit is inferred from a stack choice. Every choice must support the [project goals](how-pennywise-works.md#1-objective-and-success-criteria), state its cost, and have verification evidence.
+Updated 11 October 2026. Phase 0 tooling, validation and hashing are implemented; storage, gateway and payment choices remain designs. No performance benefit is inferred from a stack choice. Every choice must support the [project goals](how-scuta-works.md#1-objective-and-success-criteria), state its cost, and have verification evidence.
 
 [Engineering contract](core-authorization-design.md) · [Phase 0 record](development/phase-0.md)
 

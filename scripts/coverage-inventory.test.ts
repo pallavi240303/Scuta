@@ -38,7 +38,7 @@ test("coverage inventory accepts relative and absolute LCOV paths and rejects om
 });
 
 test("an unvisited nested source is inventoried and zero tests are rejected", async () => {
-  const projectRoot = await mkdtemp(resolve(tmpdir(), "pennywise-inventory-"));
+  const projectRoot = await mkdtemp(resolve(tmpdir(), "scuta-inventory-"));
   try {
     await mkdir(resolve(projectRoot, "packages/core/src/nested"), { recursive: true });
     await mkdir(resolve(projectRoot, "apps"));

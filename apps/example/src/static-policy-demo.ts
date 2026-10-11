@@ -1,5 +1,5 @@
 /** @file Local static policy walkthrough using mock identifiers, with no payment or network execution. */
-import { evaluatePolicy, type PolicyEvaluation, type PolicyEvaluationInput } from "@pennywise/core";
+import { evaluatePolicy, type PolicyEvaluation, type PolicyEvaluationInput } from "@scuta/core";
 
 /**
  * Create mock purchases below the autonomous allowance, above it and above the hard ceiling.

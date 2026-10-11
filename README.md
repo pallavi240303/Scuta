@@ -1,8 +1,8 @@
-# PennyWise
+# Scuta
 
 > Adaptive spending authorization for autonomous agents.
 
-PennyWise is being built to control agent transactions using observed behavior and financial exposure: enforce owner-defined limits, account for pending and uncertain payments, and adjust how much an agent may spend without human approval.
+Scuta is being built to control agent transactions using observed behavior and financial exposure: enforce owner-defined limits, account for pending and uncertain payments, and adjust how much an agent may spend without human approval.
 
 **Status: Phase 0 implemented.** The private TypeScript core validates wire inputs, checks delegation and static owner policy, and returns explained `ALLOW`, `DENY`, or `REQUIRE_APPROVAL` evaluations. Adaptation, shared budgets, approvals, gateway isolation and payment execution are still planned. An `ALLOW` result is not permission to sign.
 
@@ -18,7 +18,7 @@ bun run demo
 
 The local demo evaluates three mock purchases: ordinary spending is allowed, spending above the autonomous allowance requires approval, and spending above the owner hard ceiling is denied. It uses fixed time and makes no network calls or payments.
 
-The [runnable example](apps/example/src/static-policy-demo.ts) imports the built `@pennywise/core` workspace package. [Public exports](packages/core/src/index.ts) include `evaluatePolicy`, validators and digest helpers. Amounts enter as canonical decimal strings and become bounded `bigint` values; the evaluator takes typed wire objects plus explicitly supplied host scope and time, revalidating every input at runtime. GET forbids a body digest; POST requires one in both the types and validation. Malformed input throws a redacted, field-specific `ValidationError`; valid disallowed input returns `DENY`.
+The [runnable example](apps/example/src/static-policy-demo.ts) imports the built `@scuta/core` workspace package. [Public exports](packages/core/src/index.ts) include `evaluatePolicy`, validators and digest helpers. Amounts enter as canonical decimal strings and become bounded `bigint` values; the evaluator takes typed wire objects plus explicitly supplied host scope and time, revalidating every input at runtime. GET forbids a body digest; POST requires one in both the types and validation. Malformed input throws a redacted, field-specific `ValidationError`; valid disallowed input returns `DENY`.
 
 Run `bun run test` for a build and guarded test run, or `bun run test:watch` during development. `bun test` also works after building. See the [phase record](docs/development/phase-0.md) for verified commands, test evidence and limitations. Nothing is published to a registry.
 
@@ -38,7 +38,7 @@ The research question is whether adaptive restrictions and controlled recovery r
 - Binds human approval to one exact purchase; approval does not restore general authority.
 - Records decision reasons, policy versions, authority changes, and payment outcomes.
 
-The intended users are developers whose agents buy paid API access or services, and operators responsible for their budgets. The wallet handles funds and signing; PennyWise controls access to that payment authority. The policy core is separate from the payment adapter, but each supported adapter must prove its execution and reconciliation guarantees.
+The intended users are developers whose agents buy paid API access or services, and operators responsible for their budgets. The wallet handles funds and signing; Scuta controls access to that payment authority. The policy core is separate from the payment adapter, but each supported adapter must prove its execution and reconciliation guarantees.
 
 ## Payment Flow (Planned)
 
@@ -71,7 +71,7 @@ The first example uses a mock x402 `exact`/EIP-3009 profile with one configured 
 
 Gateway enforcement requires exclusive payment credentials outside the agent process. An embedded library is only a guardrail if host code can bypass it. Trusted gateway, administrator, and provider compromise are outside the threat model. A freeze cannot necessarily recall an already issued payment authorization.
 
-Custody infrastructure, trading, arbitrary contract calls, token allowances, cross-asset valuation, multiple providers, dashboards, and multi-host deployment are outside the initial scope. PennyWise does not promise perfect compromise detection or zero loss.
+Custody infrastructure, trading, arbitrary contract calls, token allowances, cross-asset valuation, multiple providers, dashboards, and multi-host deployment are outside the initial scope. Scuta does not promise perfect compromise detection or zero loss.
 
 ## Development Phases
 
@@ -82,13 +82,13 @@ Custody infrastructure, trading, arbitrary contract calls, token allowances, cro
 4. Adaptive authority: deterministic signals, reviewed baselines, persistent restrictions and controlled recovery.
 5. Evaluation and adoption: static comparisons, fault injection, one external integration and reproducible results.
 
-Tests expand in every phase. See the [canonical roadmap and acceptance gates](docs/core-authorization-design.md#17-implementation-phases). A static limit wrapper alone does not complete PennyWise.
+Tests expand in every phase. See the [canonical roadmap and acceptance gates](docs/core-authorization-design.md#17-implementation-phases). A static limit wrapper alone does not complete Scuta.
 
 ## Documentation and Contributions
 
 | Document                                                       | Purpose                                                                     |
 | -------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| [How PennyWise works](docs/how-pennywise-works.md)             | Fixed goals, beneficiaries, flows, adaptation, scope and success criteria   |
+| [How Scuta works](docs/how-scuta-works.md)                     | Fixed goals, beneficiaries, flows, adaptation, scope and success criteria   |
 | [Core authorization design](docs/core-authorization-design.md) | Algorithms, contracts, guards, accounting invariants, scenarios and roadmap |
 | [Technology decisions](docs/technology-decisions.md)           | Why each stack choice exists, its cost and when to reconsider               |
 | [Phase 0 record](docs/development/phase-0.md)                  | Initial intent, expected outcome, test plan, scripts and actual evidence    |
