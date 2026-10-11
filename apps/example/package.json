@@ -1,0 +1,9 @@
+{
+  "name": "@scuta/example",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@scuta/core": "workspace:*"
+  }
+}
