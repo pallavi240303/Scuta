@@ -9,12 +9,17 @@ test("discovers the actual core sources and test files", async () => {
   const projectRoot = resolve(import.meta.dirname, "..");
   expect((await listCoreSources(projectRoot)).map((source) => source.split("/").at(-1))).toEqual([
     "amount.ts",
+    "budget.ts",
     "canonicalization.ts",
     "delegation.ts",
     "evaluate-policy.ts",
+    "execution-binding.ts",
     "index.ts",
+    "ledger-contracts.ts",
+    "ledger-validation.ts",
     "payment-intent.ts",
     "policy.ts",
+    "reservation.ts",
     "validation.ts",
   ]);
   expect((await listTestFiles(projectRoot)).length).toBeGreaterThanOrEqual(10);

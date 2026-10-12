@@ -16,6 +16,16 @@ test("exports the supported runtime surface without execution credentials or int
       "validateDelegationScope",
       "validatePaymentIntent",
       "validatePolicy",
+      "computeBudgetExposure",
+      "computeReservationExpiry",
+      "canTransitionReservation",
+      "validateWalletConfiguration",
+      "validateBudgetAccount",
+      "validateExecutionBinding",
+      "validateLedgerObservation",
+      "computeExecutionBindingDigest",
+      "computeLedgerObservationDigest",
+      "computePayloadDigest",
     ].sort(),
   );
   expect(core.serializeAtomicAmount(core.parseAtomicAmount("9007199254740993"))).toBe(

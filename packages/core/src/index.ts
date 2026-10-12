@@ -1,4 +1,4 @@
-/** @file Supported static core API; no payment execution or signer capability is exported. */
+/** @file Supported policy and ledger-data helpers; no signer or payment credential is exported. */
 export { MAX_ATOMIC_AMOUNT, parseAtomicAmount, serializeAtomicAmount } from "./amount.js";
 export { ValidationError, type ValidationCode, type TrustedScope } from "./validation.js";
 export {
@@ -30,3 +30,44 @@ export {
   type PolicyEvaluationInput,
   type ReasonCode,
 } from "./evaluate-policy.js";
+export { computeBudgetExposure } from "./budget.js";
+export { computeReservationExpiry, canTransitionReservation } from "./reservation.js";
+export {
+  validateWalletConfiguration,
+  validateBudgetAccount,
+  validateExecutionBinding,
+  validateLedgerObservation,
+} from "./ledger-validation.js";
+export {
+  computeExecutionBindingDigest,
+  computeLedgerObservationDigest,
+  computePayloadDigest,
+} from "./execution-binding.js";
+export type {
+  WalletScope,
+  BudgetScope,
+  WalletConfigurationWire,
+  WalletConfiguration,
+  BudgetAccountWire,
+  BudgetAccount,
+  BudgetAllocation,
+  BudgetExposure,
+  ReservationState,
+  LedgerReason,
+  LedgerResult,
+  LedgerDecision,
+  IntentRecord,
+  ReservationRecord,
+  ExecutionBindingWire,
+  ExecutionBinding,
+  ExecutionRecord,
+  LedgerObservationWire,
+  LedgerObservation,
+  LedgerEventKind,
+  LedgerEvent,
+  OutboxRecord,
+  OutboxClaim,
+  WalletClockRecord,
+  WalletFaultRecord,
+  LedgerStatus,
+} from "./ledger-contracts.js";
