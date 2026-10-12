@@ -11,8 +11,8 @@ import {
   validateProfileIdentifier,
   validateScope,
   validateTimestamp,
-} from "./validation.js";
-import { createScope } from "../test/fixtures.js";
+} from "../src/validation.js";
+import { createScope } from "./fixtures.js";
 
 test("validation errors preserve machine-readable code and path", () => {
   const error = new ValidationError("INVALID_FORMAT", "intent.amountAtomic");

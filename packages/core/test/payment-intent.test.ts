@@ -1,8 +1,8 @@
 /** @file Exercise the purchase boundary without accepting ambiguous wire values or hidden authority. */
 import { expect, test } from "bun:test";
-import { createIntent } from "../test/fixtures.js";
-import { validatePaymentIntent } from "./payment-intent.js";
-import { ValidationError } from "./validation.js";
+import { createIntent } from "./fixtures.js";
+import { validatePaymentIntent } from "../src/payment-intent.js";
+import { ValidationError } from "../src/validation.js";
 
 test("reports the intent amount path without exposing the invalid value", () => {
   try {

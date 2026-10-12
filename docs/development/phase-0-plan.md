@@ -1,5 +1,7 @@
 # Scuta Phase 0 Implementation Plan
 
+> Historical plan: source-adjacent tests were moved to component `test/` folders on 12 October 2026. Paths below record the original plan, not current test commands; use `bun run test` or the corresponding `test/` path today.
+
 > **For agentic workers:** Use `superpowers:executing-plans` for native implementation, or `superpowers:subagent-driven-development` only if the maintainer chooses delegation. Complete tasks in order; checkboxes track this plan, not claimed implementation results.
 
 **Goal:** Deliver a tested, reusable static-policy core with exact amounts, trusted-scope checks, deterministic request binding, and a local demonstration.

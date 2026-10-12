@@ -1,9 +1,9 @@
 /** @file Validate protected delegation snapshots before later scope and expiry evaluation. */
 import { expect, test } from "bun:test";
-import { createDelegation, createScope, createIntent, NOW_MS } from "../test/fixtures.js";
-import { validateDelegation, validateDelegationScope } from "./delegation.js";
-import { validatePaymentIntent } from "./payment-intent.js";
-import { ValidationError } from "./validation.js";
+import { createDelegation, createScope, createIntent, NOW_MS } from "./fixtures.js";
+import { validateDelegation, validateDelegationScope } from "../src/delegation.js";
+import { validatePaymentIntent } from "../src/payment-intent.js";
+import { ValidationError } from "../src/validation.js";
 
 test("accepts the active matching grant without mutating inputs", () => {
   const reasons = validateDelegationScope(

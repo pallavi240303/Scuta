@@ -1,7 +1,7 @@
 /** @file Prove exact positive atomic amounts and reject ambiguous or unbounded money input. */
 import { expect, test } from "bun:test";
-import { parseAtomicAmount, serializeAtomicAmount } from "./amount.js";
-import { ValidationError } from "./validation.js";
+import { parseAtomicAmount, serializeAtomicAmount } from "../src/amount.js";
+import { ValidationError } from "../src/validation.js";
 
 const maximum = "115792089237316195423570985008687907853269984665640564039457584007913129639935";
 
