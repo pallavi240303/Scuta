@@ -1,6 +1,6 @@
 /** @file Consumer-facing demo outcomes must explain static policy without claiming execution authority. */
 import { expect, test } from "bun:test";
-import { runStaticPolicyDemo } from "./static-policy-demo.js";
+import { runStaticPolicyDemo } from "../src/static-policy-demo.js";
 
 test("demonstrates allow, approval and hard-deny outcomes in fixed order", () => {
   const results = runStaticPolicyDemo();

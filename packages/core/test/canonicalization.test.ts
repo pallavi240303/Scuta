@@ -1,9 +1,9 @@
 /** @file Known-answer and field-binding tests for local semantic digests, not payment signatures. */
 import { expect, test } from "bun:test";
-import { createIntent, createPolicy, createScope } from "../test/fixtures.js";
-import { computeIntentDigest, computePolicyDigest } from "./canonicalization.js";
-import { validatePaymentIntent, type PaymentIntent } from "./payment-intent.js";
-import { validatePolicy, type PolicyDigestInput } from "./policy.js";
+import { createIntent, createPolicy, createScope } from "./fixtures.js";
+import { computeIntentDigest, computePolicyDigest } from "../src/canonicalization.js";
+import { validatePaymentIntent, type PaymentIntent } from "../src/payment-intent.js";
+import { validatePolicy, type PolicyDigestInput } from "../src/policy.js";
 
 test("matches the independently checked Node SHA-256 intent fixture", () => {
   expect(computeIntentDigest(validatePaymentIntent(createIntent()), createScope())).toBe(

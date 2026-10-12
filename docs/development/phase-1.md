@@ -2,7 +2,7 @@
 
 Status: design and implementation plan approved on 12 October 2026; native implementation with independent subagent review selected. Phase 1 implementation is in progress. This is the single Phase 1 design, implementation and outcome record.
 
-On 12 October 2026, the maintainer confirmed SQLite and approved this design with the instruction to implement it. Implementation-plan review remains the next gate.
+On 12 October 2026, the maintainer confirmed SQLite and approved the design and implementation plan. Task 1 is implemented; remaining ledger tasks are pending. The milestone wrap-up includes independent review, and the maintainer subsequently authorized its commit.
 
 [Project objective](../how-scuta-works.md#1-objective-and-success-criteria) · [System invariants](../core-authorization-design.md#3-invariants) · [Roadmap](../core-authorization-design.md#17-implementation-phases)
 
@@ -24,18 +24,18 @@ One configured network/asset per wallet, exact transfer amount, and no agent-fun
 
 ## Package and file responsibilities
 
-| Location                                | Responsibility                                                                                                       |
-| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| `packages/core/src/ledger-contracts.ts` | Validated configuration, ledger inputs/results, reservation states, execution and reconciliation contracts.          |
-| `packages/core/src/budget.ts`           | Pure bigint exposure, rolling-window and headroom calculations.                                                      |
-| `packages/core/src/reservation.ts`      | Pure allowed-state transitions and expiry checks.                                                                    |
-| `packages/core/src/ledger.ts`           | Trusted coordinator using an injected transaction runner, clock and ID generator; no SQLite or provider imports.     |
-| `packages/core/test/`                   | New ledger tests and deterministic fixtures. Existing source-adjacent tests remain unchanged in this phase's design. |
-| `packages/store/src/memory-store.ts`    | Transactional test double with rollback; not a durable deployment.                                                   |
-| `packages/store/src/sqlite-store.ts`    | Bun SQLite connection, prepared statements, synchronous immediate transactions and bounded contention handling.      |
-| `packages/store/src/migrations.ts`      | Ordered, checksummed migrations and schema-version rejection.                                                        |
-| `packages/store/src/row-codecs.ts`      | Runtime validation and decimal-text decoding of persisted rows.                                                      |
-| `packages/store/test/`                  | Adapter contract, real SQLite, independent-process and crash tests; worker fixtures are not test entry files.        |
+| Location                                | Responsibility                                                                                                   |
+| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `packages/core/src/ledger-contracts.ts` | Validated configuration, ledger inputs/results, reservation states, execution and reconciliation contracts.      |
+| `packages/core/src/budget.ts`           | Pure bigint exposure, rolling-window and headroom calculations.                                                  |
+| `packages/core/src/reservation.ts`      | Pure allowed-state transitions and expiry checks.                                                                |
+| `packages/core/src/ledger.ts`           | Trusted coordinator using an injected transaction runner, clock and ID generator; no SQLite or provider imports. |
+| `packages/core/test/`                   | Static-policy and ledger tests with deterministic fixtures, separate from product sources.                       |
+| `packages/store/src/memory-store.ts`    | Transactional test double with rollback; not a durable deployment.                                               |
+| `packages/store/src/sqlite-store.ts`    | Bun SQLite connection, prepared statements, synchronous immediate transactions and bounded contention handling.  |
+| `packages/store/src/migrations.ts`      | Ordered, checksummed migrations and schema-version rejection.                                                    |
+| `packages/store/src/row-codecs.ts`      | Runtime validation and decimal-text decoding of persisted rows.                                                  |
+| `packages/store/test/`                  | Adapter contract, real SQLite, independent-process and crash tests; worker fixtures are not test entry files.    |
 
 Private `@scuta/store` depends on the built `@scuta/core`. Build core before store; verify both emitted entry points. Keep product code, tests and examples in TypeScript, precise JSDoc above functions/types and file overviews. No ORM, additional package manager, public package publication or speculative package scaffolding.
 
@@ -186,7 +186,9 @@ Self-review clarified zero budget ceilings, deadline precision, transaction-hand
 - Persist exact money as decimal text; calculate with bigint, including totals larger than one individual amount bound.
 - Use one wallet profile, configured budgets, WAL, FULL synchronous durability, foreign keys and immediate write transactions.
 - SQLite busy timeout: 50 ms; maximum three complete transaction attempts. Never retry part of a transaction or an external payment.
-- New tests live under each package's `test/`; do not bundle relocation of the existing 11 test files.
+- Tests live under each component's `test/`; tooling tests live in `scripts/test/`. The maintainer explicitly approved relocating the existing 11 tests during this milestone wrap-up.
+- Do not create further commits until the maintainer explicitly approves them; planned commit steps below are suspended by that instruction.
+- The maintainer subsequently authorized the current wrap-up commit only; remaining implementation commits still require approval.
 - Every source/test/tooling file has a file overview; named functions and types have precise JSDoc above definitions, not between fields.
 - Unknown is reserved for runtime decoding/validation. No `any`, non-null assertions, weakened lint/type rules or silent unsafe casts.
 - No HTTP server, real funds, human approval holds, signer, provider verification, adaptation, benchmark framework or UI.
@@ -203,7 +205,7 @@ These less-obvious cases are pinned to tasks below, not left to informal review:
 
 ## Shared contracts and fixture values
 
-Task 1 defines these contracts once; subsequent tasks consume them. All fields and collections are readonly. Wire monetary fields are canonical strings; validated monetary fields are bigint. IDs use the existing identifier rules; digests and nonces are lowercase 64-hex values. Missing records use explicit `null`, not undefined-filled objects.
+Task 1 defines the data contracts below; Task 2 adds the transaction ports and `LedgerError`. Subsequent tasks consume those contracts. All fields and collections are readonly. Wire monetary fields are canonical strings; validated monetary fields are bigint. IDs use the existing identifier rules; digests and nonces are lowercase 64-hex values. Missing records use explicit `null`, not undefined-filled objects.
 
 | Contract                                          | Fields / variants                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -240,7 +242,7 @@ Fixture baseline: `NOW_MS = 1791676800000`, owner-1/wallet-1/agent-1/delegation-
 
 ## Task 1: Contracts, exact budget arithmetic and lifecycle rules
 
-**Files:** Create `packages/core/src/ledger-contracts.ts`, `ledger-validation.ts`, `budget.ts`, `reservation.ts`, `execution-binding.ts`; tests with matching names under `packages/core/test/`; `packages/core/test/ledger-fixtures.ts`. Modify `packages/core/src/index.ts`, its export test and the exact core inventory expected in `scripts/coverage-inventory.test.ts`.
+**Files:** Create `packages/core/src/ledger-contracts.ts`, `ledger-validation.ts`, `budget.ts`, `reservation.ts`, `execution-binding.ts`; tests with matching names under `packages/core/test/`; `packages/core/test/ledger-fixtures.ts`. Modify `packages/core/src/index.ts`, its export test and the exact core inventory expected in `scripts/test/coverage-inventory.test.ts`.
 
 **Produces:** Shared contracts above; validators `validateWalletConfiguration(value: unknown): WalletConfiguration`, `validateBudgetAccount(value: unknown): BudgetAccount`, `validateExecutionBinding(value: unknown): ExecutionBinding`, `validateLedgerObservation(value: unknown): LedgerObservation`; `computeBudgetExposure(account: BudgetAccount, allocations: readonly BudgetAllocation[], nowMs: number): BudgetExposure`; `computeReservationExpiry(nowMs: number, ttlMs: number, deadlines: readonly number[]): number`; `canTransitionReservation(from: ReservationState, to: ReservationState): boolean`; `computeExecutionBindingDigest(binding: ExecutionBinding): string`, `computeLedgerObservationDigest(observation: LedgerObservation): string`.
 
@@ -264,7 +266,7 @@ The exposure fixture expands to typed accounts/allocations. Add lower-window equ
 
 **Files:** Create `packages/core/src/ledger-store.ts` for the shared read/write ports, `packages/store/package.json`, `tsconfig.build.json`, `src/index.ts`, `src/memory-store.ts`, `test/memory-store.test.ts`, `test/store-contract.ts`, `test/store-fixtures.ts`. Modify root build/coverage tooling only as required by the new workspace.
 
-**Consumes:** Task 1 validated contracts. **Produces:** `createMemoryStore(): LedgerStore` and a reusable adapter contract suite. Root build emits core then store; store uses `types: ["bun"]`, a private workspace dependency on @scuta/core and no path-alias fallback.
+**Consumes:** Task 1 validated contracts. **Produces:** transaction ports and the redacted `LedgerError` contract in `ledger-store.ts`, `createMemoryStore(): LedgerStore` and a reusable adapter contract suite. Root build emits core then store; store uses `types: ["bun"]`, a private workspace dependency on @scuta/core and no path-alias fallback.
 
 - [ ] Write failing tests for atomic batch application, rollback, unique intent/reservation/nonce constraints, immutable returned copies, nested calls and post-callback handle use. Assert `expect(inspectWallet(store).intents).toHaveLength(0)` after injected failure; use fixture helpers built from lifetime-checked read calls.
 - [ ] Run `bun run build && bun test packages/store/test/memory-store.test.ts`; establish missing adapter behavior, not an unrelated compiler/configuration error.
@@ -394,3 +396,15 @@ Task 1: implemented immutable ledger contracts, exact rolling spend/live-hold ca
 Verification: `bun run check` passed with 267 tests across 15 files, 620 assertions and zero failures; all 13 core sources were included in the coverage inventory. Build, formatting, lint, types and built-package smoke passed. Line/function coverage does not prove branch coverage or financial enforcement. No store, atomic reservation coordinator, signer or payment execution is implemented by Task 1.
 
 Failures resolved without weaker checks: the first red run exposed absent modules, then the assertions failed against temporary unimplemented stubs; an unused destructured test binding violated naming/lint rules, and a scope fixture widened its kind to string. The fixture fixes preserve runtime behavior and strict rules. The baseline check completed but its shell wrapper used zsh's readonly `status`; subsequent wrappers use task-specific names.
+
+### Milestone wrap-up — 12 October 2026
+
+The maintainer requested formatting and separate test folders, and prohibited further commits until explicitly approved. Task 1 was committed before that instruction; cleanup was left uncommitted at the wrap-up checkpoint. The maintainer subsequently authorized committing these changes. Phase 1 is not complete.
+
+Existing source-adjacent tests now live in `packages/core/test/` and `apps/example/test/`; tooling tests live in `scripts/test/`. Imports and repository-root/fixture paths are adjusted without changing test behavior. The unfinished Task 2 test scaffolding is preserved in ignored local planning scratch, outside runnable test discovery, for resumption; no memory or SQLite store is implemented yet.
+
+Independent read-only review found no critical or important issues in Task 1 or the relocation. Minor findings were addressed: assign `LedgerError` explicitly to Task 2, remove stale relocation/approval guidance, and pin execution/observation digest literals independently calculated with Node SHA-256 from the documented field order. No production behavior changed.
+
+Review boundaries accepted: memory transactions (Task 2), SQLite persistence (Tasks 3–4), atomic admission and clock enforcement (Task 5), execution claims (Task 6), reconciliation (Task 7), recovery/outbox (Task 8), process races/crashes (Task 9) and compiled ledger smoke coverage (Task 10) remain unimplemented and unverified. Protocol equivalence, signing, authentication, provider finality, real-fund safety, approvals, adaptation, multi-asset/fees and unfinished scratch tests are outside this milestone; they are not implied by the review.
+
+Final wrap-up verification: `bun run check` passed with 267 tests across 15 files, 622 assertions and zero failures; all 13 core sources passed inventory. Formatting, build, lint, types and built-package smoke passed. `bun run demo` retained the three expected mock decisions; `git diff --check` passed. All 11 old test paths are absent with their destination files present. HEAD remains `2dcbc9a`; no wrap-up changes were staged or committed.

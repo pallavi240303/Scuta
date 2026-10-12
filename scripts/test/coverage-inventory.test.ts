@@ -3,10 +3,10 @@ import { expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { assertCoverageInventory, listCoreSources, listTestFiles } from "./coverage-inventory.js";
+import { assertCoverageInventory, listCoreSources, listTestFiles } from "../coverage-inventory.js";
 
 test("discovers the actual core sources and test files", async () => {
-  const projectRoot = resolve(import.meta.dirname, "..");
+  const projectRoot = resolve(import.meta.dirname, "../..");
   expect((await listCoreSources(projectRoot)).map((source) => source.split("/").at(-1))).toEqual([
     "amount.ts",
     "budget.ts",
@@ -26,7 +26,7 @@ test("discovers the actual core sources and test files", async () => {
 });
 
 test("coverage inventory accepts relative and absolute LCOV paths and rejects omissions", () => {
-  const projectRoot = resolve(import.meta.dirname, "..");
+  const projectRoot = resolve(import.meta.dirname, "../..");
   const source = resolve(projectRoot, "packages/core/src/amount.ts");
   expect(() =>
     assertCoverageInventory(

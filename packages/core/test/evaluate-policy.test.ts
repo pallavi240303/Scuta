@@ -1,21 +1,15 @@
 /** @file Static decision matrix, boundary attacks, deterministic explanations and absent authority. */
 import { expect, test } from "bun:test";
-import {
-  createDelegation,
-  createIntent,
-  createPolicy,
-  createScope,
-  NOW_MS,
-} from "../test/fixtures.js";
+import { createDelegation, createIntent, createPolicy, createScope, NOW_MS } from "./fixtures.js";
 import {
   evaluatePolicy,
   type PolicyEvaluation,
   type PolicyEvaluationInput,
-} from "./evaluate-policy.js";
-import { validatePaymentIntent } from "./payment-intent.js";
-import { validatePolicy } from "./policy.js";
-import { computeIntentDigest } from "./canonicalization.js";
-import { ValidationError } from "./validation.js";
+} from "../src/evaluate-policy.js";
+import { validatePaymentIntent } from "../src/payment-intent.js";
+import { validatePolicy } from "../src/policy.js";
+import { computeIntentDigest } from "../src/canonicalization.js";
+import { ValidationError } from "../src/validation.js";
 
 /**
  * Create independent default contracts for one deterministic evaluation test.

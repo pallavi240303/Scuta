@@ -4,7 +4,7 @@
 
 Scuta is being built to control agent transactions using observed behavior and financial exposure: enforce owner-defined limits, account for pending and uncertain payments, and adjust how much an agent may spend without human approval.
 
-**Status: Phase 0 implemented.** The private TypeScript core validates wire inputs, checks delegation and static owner policy, and returns explained `ALLOW`, `DENY`, or `REQUIRE_APPROVAL` evaluations. Adaptation, shared budgets, approvals, gateway isolation and payment execution are still planned. An `ALLOW` result is not permission to sign.
+**Status: Phase 0 implemented; Phase 1 contracts and pure helpers implemented.** The private TypeScript core validates wire inputs, checks delegation and static owner policy, and returns explained `ALLOW`, `DENY`, or `REQUIRE_APPROVAL` evaluations. Ledger contracts, exact exposure calculations, lifecycle rules and execution-binding digests are available; persistent stores and atomic reservations are not. Adaptation, shared budgets, approvals, gateway isolation and payment execution are still planned. An `ALLOW` result is not permission to sign.
 
 ## Try Phase 0
 
@@ -20,7 +20,7 @@ The local demo evaluates three mock purchases: ordinary spending is allowed, spe
 
 The [runnable example](apps/example/src/static-policy-demo.ts) imports the built `@scuta/core` workspace package. [Public exports](packages/core/src/index.ts) include `evaluatePolicy`, validators and digest helpers. Amounts enter as canonical decimal strings and become bounded `bigint` values; the evaluator takes typed wire objects plus explicitly supplied host scope and time, revalidating every input at runtime. GET forbids a body digest; POST requires one in both the types and validation. Malformed input throws a redacted, field-specific `ValidationError`; valid disallowed input returns `DENY`.
 
-Run `bun run test` for a build and guarded test run, or `bun run test:watch` during development. `bun test` also works after building. See the [phase record](docs/development/phase-0.md) for verified commands, test evidence and limitations. Nothing is published to a registry.
+Run `bun run test` for a build and guarded test run, or `bun run test:watch` during development. `bun test` also works after building. Tests and fixtures live in each component's `test/` folder, separate from `src/`; tooling tests live in `scripts/test/`. See the [Phase 0 record](docs/development/phase-0.md) and [Phase 1 record](docs/development/phase-1.md) for verified commands, test evidence and limitations. Nothing is published to a registry.
 
 [GitHub Actions](.github/workflows/check.yml) runs the same checks on pushes and PRs. See the [CI expectations](CONTRIBUTING.md#continuous-integration).
 

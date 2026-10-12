@@ -17,6 +17,7 @@ test("payload digest hashes decoded unsigned bytes rather than base64 text", () 
 test("execution bindings are deterministic and ignore object key insertion order", () => {
   const raw = createExecutionBinding();
   const baseline = computeExecutionBindingDigest(validateExecutionBinding(raw));
+  expect(baseline).toBe("e413e84f6fa23cecd43db38bd6f3b43571117361cfd379a18bd5b0b4b9a8b39d");
   expect(baseline).toMatch(/^[a-f0-9]{64}$/u);
   expect(
     computeExecutionBindingDigest(
@@ -59,6 +60,7 @@ test("evidence content cannot reuse identity without changing the observation di
     evidenceRef: "mock:receipt-1",
   };
   const baseline = computeLedgerObservationDigest(validateLedgerObservation(raw));
+  expect(baseline).toBe("38cde3d684cce6280cc31529fd5cf9d9cbd668b9370c1c1248a09680c34c62d8");
   for (const change of [
     { evidenceId: "evidence-2" },
     { executionId: "execution-2" },

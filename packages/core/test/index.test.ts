@@ -1,6 +1,6 @@
-/** @file Verify the source entry exposes only documented static operations, not internal validation shortcuts. */
+/** @file Verify the source entry exposes only documented policy and ledger helpers, not internal validation shortcuts. */
 import { expect, test } from "bun:test";
-import * as core from "./index.js";
+import * as core from "../src/index.js";
 
 test("exports the supported runtime surface without execution credentials or internal guards", () => {
   expect(Object.keys(core).sort()).toEqual(

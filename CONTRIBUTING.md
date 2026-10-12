@@ -6,8 +6,8 @@ Scuta is building behavior-adaptive authorization for agent payments, bounded by
 
 Every contribution must strengthen **authorization, exposure accounting, adaptive authority, approval safety, or verification**. Read the [goals and boundaries](docs/how-scuta-works.md) and [implementation roadmap](docs/core-authorization-design.md#17-implementation-phases) before proposing work.
 
-- **Implemented:** the TypeScript static-policy core, input validation, delegation checks and canonical binding. Current contributions can add boundary/regression tests, focused fixes, clearer contracts and accurate documentation.
-- **Next:** design the authoritative SQLite ledger, atomic budget holds, scoped retries and crash recovery. Discuss those contracts before implementation.
+- **Implemented:** the TypeScript static-policy core, input validation, delegation checks, canonical binding, ledger contracts and pure exposure/lifecycle helpers. Current contributions can add boundary/regression tests, focused fixes, clearer contracts and accurate documentation.
+- **Next:** implement the agreed authoritative SQLite ledger, atomic budget holds, scoped retries and crash recovery. Follow the [Phase 1 plan](docs/development/phase-1.md); discuss contract changes before implementation.
 - **Later:** isolated execution, the bounded x402 integration, durable approvals, deterministic adaptation and evaluation. Propose scenarios now; do not add later-phase infrastructure before its contracts are agreed.
 
 The initial reference release targets one gateway/store, one configured payment profile and one verified external sandbox/testnet integration. The pure core stays separate from storage, networking and provider SDKs.
@@ -60,6 +60,7 @@ A static `ALLOW` is not a reservation or permission to sign. Embedded checks can
 - Use bounded atomic-unit `bigint` internally and canonical decimal strings externally. Never use floating-point money.
 - Keep names clear. Add file overviews and meaningful function JSDoc (`@param`, `@returns`, relevant `@throws`); put concise JSDoc above types/interfaces, not between fields.
 - Keep dependencies pinned and include intentional `bun.lock` changes. Do not introduce another package-manager lockfile or weaken lint, types, runtime validation or coverage checks.
+- Keep tests and fixtures in the component's `test/` folder, alongside (not inside) `src/`. Use `packages/core/test/`, `apps/example/test/` and `scripts/test/` for the current components; name executable tests `*.test.ts`.
 
 Write failing tests before behavior changes. Test rejection paths and affected boundaries, not just successful decisions. Future stateful work needs real-store concurrency/restart tests, crash and replay cases, stale approvals and ambiguous outcomes—not mock-only evidence. Keep fixtures deterministic and logs redacted.
 

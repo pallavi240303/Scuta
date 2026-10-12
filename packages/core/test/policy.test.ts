@@ -1,8 +1,8 @@
 /** @file Keep owner policy immutable and reject inconsistent caps, rule sets and review settings. */
 import { expect, test } from "bun:test";
-import { createPolicy, createScope } from "../test/fixtures.js";
-import { validatePolicy } from "./policy.js";
-import { ValidationError } from "./validation.js";
+import { createPolicy, createScope } from "./fixtures.js";
+import { validatePolicy } from "../src/policy.js";
+import { ValidationError } from "../src/validation.js";
 
 test.each(["hardTransactionLimitAtomic", "autonomousTransactionLimitAtomic"] as const)(
   "reports the exact policy amount field %s without exposing its value",
