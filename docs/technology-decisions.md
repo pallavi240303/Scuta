@@ -1,6 +1,6 @@
 # Scuta — Technology Decisions
 
-Updated 11 October 2026. Phase 0 tooling, validation and hashing are implemented; storage, gateway and payment choices remain designs. No performance benefit is inferred from a stack choice. Every choice must support the [project goals](how-scuta-works.md#1-objective-and-success-criteria), state its cost, and have verification evidence.
+Updated 17 October 2026. Phase 0 tooling, validation and hashing, plus Phase 1 contracts, the memory test store and SQLite transaction adapter, are implemented. Financial admission, gateway and payment implementation remain pending. No performance benefit is inferred from a stack choice. Every choice must support the [project goals](how-scuta-works.md#1-objective-and-success-criteria), state its cost, and have verification evidence.
 
 [Engineering contract](core-authorization-design.md) · [Phase 0 record](development/phase-0.md)
 
@@ -32,6 +32,33 @@ Reconsider before Phase 1 if multi-host or managed-database operation is require
 Migration must pause new authorization, preserve holds/approvals/policy revisions/payment identities, reconcile state and establish one authoritative writer before resuming. Never let both stores independently authorize the wallet.
 
 **Decision:** SQLite first; PostgreSQL is a scoped alternative, not a promised extra adapter. Phase 0 has no database.
+
+### Memory transaction adapter
+
+The internal `@scuta/store` adapter uses typed maps with copied, deeply frozen records. Each write callback works on private candidate maps and publishes them only on success; failures, thenables and escaped handles cannot commit late writes. The same observable contract tests will run against SQLite. This separates transaction semantics from the database driver, but memory cannot survive restarts or coordinate processes and is never a deployment substitute.
+
+Snapshot copying explicitly accepts inert primitive/object/array data and preserves bigint. It rejects accessors, custom prototypes, sparse arrays and cycles. Native Bun `structuredClone` did not preserve shared scope references in the full fixture, so checked explicit copying is used instead. No runtime dependency was added; the existing standard-library `node:util` comparison checks immutable replay without depending on object-key insertion order.
+
+### SQLite schema and encoding
+
+- **Driver:** pinned Bun's built-in `bun:sqlite` avoids a native addon or ORM and fits synchronous local transactions. The internal SQLite adapter implements the store port without exposing its driver; this does not promise Node portability.
+- **Schema:** STRICT tables, compound ownership keys, uniqueness constraints and deferred foreign keys reject malformed relational records while allowing intent/reservation/execution links to commit in one batch. Adapters must still check cross-record financial semantics; foreign keys alone do not authorize a payment.
+- **Encoding:** canonical decimal TEXT preserves unsigned 256-bit money; safe-integer metadata stays INTEGER. Bounded canonical JSON retains complete typed records, while relational columns support lookups and independent validation. The cost is duplicated metadata and decode work; every column must match the validated payload.
+- **Integrity:** versioned SQL checksums and exact schema comparison reject changed or unexpected objects, rather than silently repairing history. This detects incompatible layouts, not privileged data tampering. An intentional schema change needs a new migration.
+
+Row codecs are private, reconstruct checked immutable records, recompute semantic digests and return redacted `STORE_CORRUPT` failures. Real SQLite tests cover constraints, malformed rows, repeated migration and close/reopen. WAL/FULL/foreign-key settings and guarded transactions are tested; independent-process crash recovery remains unverified.
+
+### SQLite transaction adapter
+
+Writes use `BEGIN IMMEDIATE` so they acquire write ownership before reading mutable state. Prepared queries bind values; checked batches enforce immutable identities, expected revisions/states/tokens and affected financial references before commit. Failed applies poison the whole callback even when caught. Read handles use deferred, query-only transactions so multi-query results share a snapshot without acquiring write ownership.
+
+WAL lets a reader retain its snapshot while another connection commits; FULL requests SQLite's stronger synchronous durability setting. Neither configuration is evidence of power-loss or cross-process crash recovery. The adapter requires a local file and rejects memory-only paths instead of silently dropping WAL. Its cost is one serialized writer and dependence on the pinned Bun runtime and trustworthy local filesystem.
+
+Busy handling retries complete rolled-back attempts at most three times, using a default 50 ms SQLite timeout. Test overrides are limited to 0–50 ms and one to three attempts. Private retry provenance distinguishes real driver contention from callback-generated ledger errors; deterministic conflicts and application errors are not retried. Callbacks must remain synchronous and free of external side effects because a retry can rerun them. The store never deletes live WAL sidecars; callers close their handles, and tests remove only their owned temporary directory after closing every connection.
+
+Migration receives the same validated timeout as connection setup, including every initialization retry; direct migration calls default to 50 ms. A regression observes the actual connection setting before each immediate migration attempt under real writer contention, covering 0 ms, 7 ms and the default. This is a SQLite lock-wait setting, not an end-to-end startup latency guarantee. The earlier mismatch is resolved in the [Task 4 follow-up](development/phase-1.md#startup-timeout-fix-and-implementation-audit).
+
+This is an internal storage port, not an admission engine: a trusted caller can submit a reservation without allocations. It validates supplied financial links but does not derive or require every applicable budget. Task 5 must perform that complete admission in one transaction before any execution integration is usable.
 
 ## 2. Language and developer tooling
 
@@ -71,7 +98,7 @@ Test execution does not replace type checking. [TypeScript types](https://www.ty
 | Atomic-unit `bigint`, decimal-string boundaries | Exact amounts and explicit encoding                             | Validate bounds/canonical form; test beyond safe-integer range and database round trips                  |
 | Runtime schemas                                 | Input, policy and receipts remain untrusted despite types       | Explicit Phase 0 object validators; future receipt/HTTP schemas deferred; reject unknown security fields |
 | Versioned canonical digests                     | Bind identical semantics across retries, approval and decisions | Phase 0 fixed-order arrays and SHA-256; digests are not authentication; payment signing is deferred      |
-| Durable relational ledger                       | Atomic holds, identities, approvals and state                   | Phase 1 schema/encoding need design; test real-store concurrency, atomicity and crashes                  |
+| Durable relational ledger                       | Atomic holds, identities, approvals and state                   | SQLite transactions implemented; admission and independent-process concurrency/crash evidence pending    |
 | Memory store                                    | Fast isolated tests and fault fixtures                          | Test-only; no restart or real-fund persistence guarantee                                                 |
 | Transactional outbox/workers                    | State and work commit together; external calls follow           | Repeated delivery needs event IDs/idempotent consumers and crash tests; not an external broker           |
 | Deterministic signals/authority states          | Explain and reproduce permission changes without inference      | Phase 4; measure missed attacks, false blocks, approval burden and recovery                              |
@@ -97,7 +124,7 @@ A hosted wallet can be the execution adapter while still settling on a blockchai
 
 Phase 0 uses small explicit validators rather than a schema dependency: the object contract is bounded and reviewable, with unknown-field, accessor, type and immutability tests. Its digests use fixed-order JSON arrays, decimal-string amounts, sorted recipient sets and domain-separated SHA-256 through `node:crypto`. This is local semantic binding, not authentication, an x402 signature, or an audit tree.
 
-HTTP framework, SQLite driver, migrations, hosted wallet, approval channel and protocol/SDK versions remain open. Lint/format tools, CI configuration and Phase 0 encoding are selected above. No ORM is required until it solves a demonstrated storage need.
+HTTP framework, hosted wallet, approval channel and protocol/SDK versions remain open. The SQLite driver, first migration and transaction adapter are selected above; the financial coordinator remains pending. No ORM is required until it solves a demonstrated storage need.
 
 Choose tooling in Phase 0, storage in Phase 1, mock payment/HTTP in Phase 2, approval delivery in Phase 3, and the external integration by Phase 5. Record each choice, requirement, rejected alternative, operational cost and verification here; record actual results in the phase record.
 

@@ -31,6 +31,24 @@ export {
   type ReasonCode,
 } from "./evaluate-policy.js";
 export { computeBudgetExposure } from "./budget.js";
+export {
+  LedgerError,
+  type LedgerErrorCode,
+  type PolicySnapshot,
+  type DelegationSnapshot,
+  type PolicyActivation,
+  type DelegationActivation,
+  type BudgetMutation,
+  type ReservationMutation,
+  type AllocationMutation,
+  type ObservationRecord,
+  type OutboxMutation,
+  type ClockMutation,
+  type LedgerChanges,
+  type LedgerReadView,
+  type LedgerTransaction,
+  type LedgerStore,
+} from "./ledger-store.js";
 export { computeReservationExpiry, canTransitionReservation } from "./reservation.js";
 export {
   validateWalletConfiguration,

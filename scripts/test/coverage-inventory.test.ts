@@ -3,7 +3,12 @@ import { expect, test } from "bun:test";
 import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
-import { assertCoverageInventory, listCoreSources, listTestFiles } from "../coverage-inventory.js";
+import {
+  assertCoverageInventory,
+  listCoreSources,
+  listImplementationSources,
+  listTestFiles,
+} from "../coverage-inventory.js";
 
 test("discovers the actual core sources and test files", async () => {
   const projectRoot = resolve(import.meta.dirname, "../..");
@@ -16,6 +21,7 @@ test("discovers the actual core sources and test files", async () => {
     "execution-binding.ts",
     "index.ts",
     "ledger-contracts.ts",
+    "ledger-store.ts",
     "ledger-validation.ts",
     "payment-intent.ts",
     "policy.ts",
@@ -64,5 +70,37 @@ test("an unvisited nested source is inventoried and zero tests are rejected", as
     expect(failure instanceof Error ? failure.message : "").toMatch(/No test/u);
   } finally {
     await rm(projectRoot, { recursive: true });
+  }
+});
+
+test("declared package inventory includes store sources and rejects empty implementation packages", async () => {
+  const root = await mkdtemp(resolve(tmpdir(), "scuta-packages-"));
+  try {
+    await writeFile(
+      resolve(root, "package.json"),
+      JSON.stringify({ workspaces: ["packages/*", "apps/*"] }),
+    );
+    for (const name of ["core", "store"]) {
+      await mkdir(resolve(root, "packages", name, "src"), { recursive: true });
+      await writeFile(
+        resolve(root, "packages", name, "package.json"),
+        JSON.stringify({ name: "@scuta/" + name }),
+      );
+      await writeFile(resolve(root, "packages", name, "src", "index.ts"), "export {};");
+    }
+    const sources = await listImplementationSources(root);
+    expect(sources).toEqual([
+      resolve(root, "packages/core/src/index.ts"),
+      resolve(root, "packages/store/src/index.ts"),
+    ]);
+    expect(() =>
+      assertCoverageInventory(root, sources, "SF:packages/core/src/index.ts\nend_of_record\n"),
+    ).toThrow(/omitted/u);
+    await rm(resolve(root, "packages/store/src/index.ts"));
+    const failure: unknown = await listImplementationSources(root).catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(Error);
+    expect(failure instanceof Error ? failure.message : "").toMatch(/No implementation/u);
+  } finally {
+    await rm(root, { recursive: true });
   }
 });

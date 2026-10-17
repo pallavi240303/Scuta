@@ -7,6 +7,7 @@ test("exports the supported runtime surface without execution credentials or int
     [
       "MAX_ATOMIC_AMOUNT",
       "ValidationError",
+      "LedgerError",
       "computeIntentDigest",
       "computePolicyDigest",
       "evaluatePolicy",

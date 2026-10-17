@@ -16,7 +16,7 @@
     "lint": "bun run --bun eslint . --max-warnings 0",
     "format:check": "bun run --bun prettier --check .",
     "format": "bun run --bun prettier --write .",
-    "build": "bun run --bun tsc -p packages/core/tsconfig.build.json",
+    "build": "bun run --bun tsc -p packages/core/tsconfig.build.json && bun run --bun tsc -p packages/store/tsconfig.build.json",
     "demo": "bun run build && bun apps/example/src/static-policy-demo.ts",
     "smoke": "bun scripts/verify-built-package.ts",
     "check": "bun run build && bun run format:check && bun run lint && bun run typecheck && bun run test:coverage && bun run smoke"

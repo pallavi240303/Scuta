@@ -1,4 +1,4 @@
-/** @file Enumerate core sources and verify that loaded-file LCOV has not silently omitted a module. */
+/** @file Discover declared implementation sources and reject silently omitted modules in loaded-file LCOV. */
 import { readdir, readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -36,6 +36,49 @@ export async function listCoreSources(projectRoot: string): Promise<readonly str
   return (await listFiles(resolve(projectRoot, "packages/core/src"))).filter(
     (path) => path.endsWith(".ts") && !path.endsWith(".test.ts") && !path.endsWith(".d.ts"),
   );
+}
+
+/** Discover sources in every declared implementation package.
+ * @param projectRoot - Workspace root declaring packages/*.
+ * @returns Sorted sources from nonempty implementation packages.
+ * @throws {Error} If any declared package or source inventory is invalid.
+ */
+export async function listImplementationSources(projectRoot: string): Promise<readonly string[]> {
+  const manifest: unknown = JSON.parse(
+    await readFile(resolve(projectRoot, "package.json"), "utf8"),
+  );
+  if (
+    typeof manifest !== "object" ||
+    manifest === null ||
+    !("workspaces" in manifest) ||
+    !Array.isArray(manifest.workspaces) ||
+    !manifest.workspaces.includes("packages/*")
+  )
+    throw new Error("Unsupported implementation workspace declaration");
+  const directory = resolve(projectRoot, "packages");
+  const packages = (await readdir(directory, { withFileTypes: true })).filter((entry) =>
+    entry.isDirectory(),
+  );
+  if (packages.length === 0) throw new Error("No implementation packages discovered");
+  const inventories = await Promise.all(
+    packages.map(async (entry) => {
+      const root = resolve(directory, entry.name);
+      const metadata: unknown = JSON.parse(await readFile(resolve(root, "package.json"), "utf8"));
+      if (
+        typeof metadata !== "object" ||
+        metadata === null ||
+        !("name" in metadata) ||
+        typeof metadata.name !== "string"
+      )
+        throw new Error("Invalid implementation package manifest");
+      const sources = (await listFiles(resolve(root, "src"))).filter(
+        (path) => path.endsWith(".ts") && !path.endsWith(".test.ts") && !path.endsWith(".d.ts"),
+      );
+      if (sources.length === 0) throw new Error("No implementation sources in " + metadata.name);
+      return sources;
+    }),
+  );
+  return inventories.flat().sort();
 }
 
 /**
@@ -90,11 +133,11 @@ export async function listTestFiles(projectRoot: string): Promise<readonly strin
 
 if (import.meta.main) {
   const projectRoot = resolve(import.meta.dirname, "..");
-  const sources = await listCoreSources(projectRoot);
+  const sources = await listImplementationSources(projectRoot);
   assertCoverageInventory(
     projectRoot,
     sources,
     await readFile(resolve(projectRoot, "coverage/lcov.info"), "utf8"),
   );
-  console.log(`Coverage inventory verified: ${sources.length} core source files.`);
+  console.log(`Coverage inventory verified: ${sources.length} implementation source files.`);
 }

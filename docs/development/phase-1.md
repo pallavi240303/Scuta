@@ -2,7 +2,7 @@
 
 Status: design and implementation plan approved on 12 October 2026; native implementation with independent subagent review selected. Phase 1 implementation is in progress. This is the single Phase 1 design, implementation and outcome record.
 
-On 12 October 2026, the maintainer confirmed SQLite and approved the design and implementation plan. Task 1 is implemented; remaining ledger tasks are pending. The milestone wrap-up includes independent review, and the maintainer subsequently authorized its commit.
+On 12 October 2026, the maintainer confirmed SQLite and approved the design and implementation plan. Tasks 1–4 are implemented and independently reviewed locally: contracts, the memory adapter, SQLite schema/codecs and the SQLite transaction adapter. The financial coordinator remains pending. The earlier wrap-up was committed with approval; Tasks 2–4 changes are uncommitted. The reviewed startup-timeout finding was subsequently fixed with regression tests; see the [current audit](#startup-timeout-fix-and-implementation-audit).
 
 [Project objective](../how-scuta-works.md#1-objective-and-success-criteria) · [System invariants](../core-authorization-design.md#3-invariants) · [Roadmap](../core-authorization-design.md#17-implementation-phases)
 
@@ -161,7 +161,7 @@ Map tests to INV-01 through INV-11 where applicable. INV-12 behavioral/operator 
 
 The implementation plan below pins bite-sized TDD tasks for contracts and arithmetic, adapter transactions/migrations, admission, claims/reconciliation, outbox/recovery and cross-process verification. Execute it only after plan review. Store build/type/export checks and source inventory must include both packages without weakening existing checks.
 
-Required evidence: frozen installation, full build/format/lint/type checks, core/store test inventories, existing static digest fixtures, store smoke checks and Linux CI results when available. Record exact commands, failed probes, actual outcomes and remaining limitations in this file. No implementation, passing Phase 1 tests, benchmark results or security proof is claimed yet.
+Required evidence: frozen installation, full build/format/lint/type checks, core/store test inventories, existing static digest fixtures, store smoke checks and Linux CI results when available. Record exact commands, failed probes, actual outcomes and remaining limitations in this file. This gate describes the complete phase; Tasks 1–2 evidence below does not establish durable-store or financial-enforcement guarantees.
 
 ## Design verification — 12 October 2026
 
@@ -234,9 +234,11 @@ Use stored policy/delegation wire snapshots plus parsed values; do not hash an u
 
 `LedgerStore` produces `transaction<T>(operation: (tx: LedgerTransaction) => T): T`, `read<T>(operation: (tx: LedgerReadView) => T): T` and `close(): void`. Read callbacks also have lifetime-checked handles and reject promises. `LedgerTransaction` extends LedgerReadView with `apply(changes: LedgerChanges): void`; the adapter applies an entire typed batch, never a caller's raw SQL.
 
-LedgerReadView methods are synchronous: `getWallet(wallet)`, `getPolicy(scope)`, `getDelegation(scope)`, `getBudgets(scope)`, `getBudget(wallet, accountId)`, `findIntent(scope, idempotencyKey)`, `getIntent(scope, intentId)`, `getReservation(scope, reservationId)`, `getExecution(scope, executionId)`, `getAllocations(accountIds, earliestCommittedAtMs)`, `getObservation(wallet, evidenceId)`, `getClock(wallet)`, `getFault(wallet)`, `getOutbox(wallet, eventId)`, `listExpirable(wallet, nowMs, limit)`, `listOrphans(wallet, beforeMs, limit)` and `listDeliverable(wallet, nowMs, limit)`. Each returns the named record or null, or a readonly collection of that record. Delegation reads return the snapshot and revision. Allocation reads include all unresolved holds and committed rows newer than the supplied lower bound.
+LedgerReadView methods are synchronous: `getWallet(wallet)`, `getPolicy(scope)`, `getDelegation(scope)`, `getBudgets(scope)`, `getBudget(wallet, accountId)`, `findIntent(scope, idempotencyKey)`, `getIntent(scope, intentId)`, `getReservation(scope, reservationId)`, `getExecution(scope, executionId)`, `getAllocations(wallet, accountIds, earliestCommittedAtMs)`, `getObservation(wallet, evidenceId)`, `getClock(wallet)`, `getFault(wallet)`, `getOutbox(wallet, eventId)`, `listExpirable(wallet, nowMs, limit)`, `listOrphans(wallet, beforeMs, limit)` and `listDeliverable(wallet, nowMs, limit)`. Each returns the named record or null, or a readonly collection of that record. Delegation reads return the snapshot and revision. Allocation reads include all unresolved holds and committed rows newer than the supplied lower bound; calculated allocation/orphan cutoffs may be negative safe integers. Wallet ownership is explicit so local IDs may repeat across wallets.
 
 `LedgerChanges` has readonly arrays of wallets, policy activations, delegation activations, budgets, intents, reservations, allocations, executions, observations, events, outbox, clocks and faults. Empty arrays mean no change. Immutable records permit insert or identical replay only; mutable records carry expected revision/state/claim token where applicable. Policies/delegations have immutable snapshots and separate active pointers. Adapters validate table keys, scope relationships and immutable columns when applying changes, with matching SQLite uniqueness/foreign-key constraints.
+
+Task 2 pins the batch types in `packages/core/src/ledger-store.ts`: policy/delegation records pair wire and parsed snapshots; budget, reservation, allocation, outbox and clock updates include their expected current value. Allocation and observation writes carry explicit wallet ownership. An apply failure invalidates the whole write callback even if the caller catches it. Worker query limits are 1–1000, with case-sensitive identifier tie-breaking rather than locale-dependent ordering.
 
 Fixture baseline: `NOW_MS = 1791676800000`, owner-1/wallet-1/agent-1/delegation-1, mock:local/mock:usd, mock-signer-1, merchant:weather, existing HTTPS GET purchase, intent deadline NOW_MS+300,000, delegation deadline NOW_MS+3,600,000. Wallet budget ID wallet-budget, ceiling 100 atomic units, window 60,000 ms; policy hard/autonomous ceilings both 100. Reservation/execution TTLs and orphan threshold are 60,000 ms. The race uses two agents configured before history exists. Values are test fixtures, not production defaults.
 
@@ -268,11 +270,11 @@ The exposure fixture expands to typed accounts/allocations. Add lower-window equ
 
 **Consumes:** Task 1 validated contracts. **Produces:** transaction ports and the redacted `LedgerError` contract in `ledger-store.ts`, `createMemoryStore(): LedgerStore` and a reusable adapter contract suite. Root build emits core then store; store uses `types: ["bun"]`, a private workspace dependency on @scuta/core and no path-alias fallback.
 
-- [ ] Write failing tests for atomic batch application, rollback, unique intent/reservation/nonce constraints, immutable returned copies, nested calls and post-callback handle use. Assert `expect(inspectWallet(store).intents).toHaveLength(0)` after injected failure; use fixture helpers built from lifetime-checked read calls.
-- [ ] Run `bun run build && bun test packages/store/test/memory-store.test.ts`; establish missing adapter behavior, not an unrelated compiler/configuration error.
-- [ ] Implement transaction ports and snapshot/rollback memory behavior; invalidate handles in finally. Reject thenables before commit and preserve rollback after a queued continuation attempts another write. Only adapter state is cloned; no caller object becomes authoritative by reference.
-- [ ] Run the contract suite and strict checks. Add declared-package source discovery to coverage preload/inventory: both core and store must be nonempty and represented; keep the empty-test guard and existing listCoreSources behavior. Update exact source expectations rather than relaxing assertions.
-- [ ] Commit as `feat(store): add transactional memory ledger adapter`.
+- [x] Write failing tests for atomic batch application, rollback, unique intent/reservation/nonce constraints, immutable returned copies, nested calls and post-callback handle use. Assert `expect(inspectWallet(store).intents).toHaveLength(0)` after injected failure; use fixture helpers built from lifetime-checked read calls.
+- [x] Run `bun run build && bun test packages/store/test/memory-store.test.ts`; establish missing adapter behavior, not an unrelated compiler/configuration error.
+- [x] Implement transaction ports and snapshot/rollback memory behavior; invalidate handles in finally. Reject thenables before commit and preserve rollback after a queued continuation attempts another write. Only adapter state is cloned; no caller object becomes authoritative by reference.
+- [x] Run the contract suite and strict checks. Add declared-package source discovery to coverage preload/inventory: both core and store must be nonempty and represented; keep the empty-test guard and existing listCoreSources behavior. Update exact source expectations rather than relaxing assertions.
+- [ ] Commit as `feat(store): add transactional memory ledger adapter` only after explicit maintainer approval.
 
 ## Task 3: SQLite schema, migrations and row decoding
 
@@ -280,11 +282,11 @@ The exposure fixture expands to typed accounts/allocations. Add lower-window equ
 
 **Produces:** `migrateLedger(database: Database): void`; typed per-record codecs exposed only inside store. Migration 1 creates schema_migrations, wallets, policy_snapshots, active_policies, delegation_snapshots, active_delegations, budget_accounts, payment_intents, reservations, reservation_allocations, executions, reconciliation_observations, decision_events, outbox_events, wallet_clocks and ledger_faults.
 
-- [ ] Write failing tests: clean migration applies once; changed checksum/newer schema rejects; money 9007199254740993 and MAX_ATOMIC_AMOUNT round trips exactly; corrupt decimal/time/state rows reject. Assert duplicate scope/key, reservation/intent, execution/reservation and wallet/profile/nonce inserts fail. Add allocation-account/reservation and observation-execution foreign-key violations.
-- [ ] Run `bun test packages/store/test/migrations.test.ts packages/store/test/row-codecs.test.ts`; confirm the intended failures.
-- [ ] Implement checked migrations inside immediate transactions and runtime row codecs. Financial columns are TEXT; times/revisions/sequences are checked safe integers. Index account/state/commit time, scoped retry keys, reservation state/deadline, execution claim time and outbox state/deadline. Relational metadata must agree with decoded payload records. Invalid rows throw STORE_CORRUPT, never return empty balances.
-- [ ] Run migration/codec tests and type/lint checks, including a reopen and repeated migration.
-- [ ] Commit as `feat(store): add validated SQLite ledger schema and migrations`.
+- [x] Write failing tests: clean migration applies once; changed checksum/newer schema rejects; money 9007199254740993 and MAX_ATOMIC_AMOUNT round trips exactly; corrupt decimal/time/state rows reject. Assert duplicate scope/key, reservation/intent, execution/reservation and wallet/profile/nonce inserts fail. Add allocation-account/reservation and observation-execution foreign-key violations.
+- [x] Run `bun test packages/store/test/migrations.test.ts packages/store/test/row-codecs.test.ts`; confirm the intended failures.
+- [x] Implement checked migrations inside immediate transactions and runtime row codecs. Financial columns are TEXT; times/revisions/sequences are checked safe integers. Index account/state/commit time, scoped retry keys, reservation state/deadline, execution claim time and outbox state/deadline. Relational metadata must agree with decoded payload records. Invalid rows throw STORE_CORRUPT, never return empty balances.
+- [x] Run migration/codec tests and type/lint checks, including a reopen and repeated migration.
+- [ ] Commit as `feat(store): add validated SQLite ledger schema and migrations` only after explicit maintainer approval.
 
 ## Task 4: SQLite transaction adapter
 
@@ -292,11 +294,11 @@ The exposure fixture expands to typed accounts/allocations. Add lower-window equ
 
 **Produces:** `openSqliteStore(options: { path: string; busyTimeoutMs?: number; maxAttempts?: number }): LedgerStore`; defaults 50 ms/three attempts; test overrides permit integer busyTimeoutMs in 0–50 and maxAttempts in 1–3 only. Driver access is never exported from the public store instance.
 
-- [ ] Write failing tests using temporary local files for WAL/FULL/foreign-key settings, the shared rollback/handle contract, close/reopen persistence and bounded contention. Assert rolled-back intent/event/outbox counts remain zero. Force another connection to retain write ownership and assert STORE_BUSY after the attempt bound.
-- [ ] Run `bun test packages/store/test/sqlite-store.test.ts`; confirm absence of required adapter behavior.
-- [ ] Implement prepared record queries and guarded batch writes. Use BEGIN IMMEDIATE for mutations; rollback the whole attempt on failure and invalidate handles. Retry only busy failures with no external calls. Read views must be read-only database transactions, not unprotected multi-query snapshots. Reject nested callbacks and async continuation writes as in memory.
-- [ ] Run both adapter suites plus strict checks. Verify process/connection cleanup preserves shared WAL state; never delete live sidecars as a cleanup shortcut.
-- [ ] Commit as `feat(store): enforce atomic SQLite ledger transactions`.
+- [x] Write failing tests using temporary local files for WAL/FULL/foreign-key settings, the shared rollback/handle contract, close/reopen persistence and bounded contention. Assert rolled-back intent/event/outbox counts remain zero. Force another connection to retain write ownership and assert STORE_BUSY after the attempt bound.
+- [x] Run `bun test packages/store/test/sqlite-store.test.ts`; confirm absence of required adapter behavior.
+- [x] Implement prepared record queries and guarded batch writes. Use BEGIN IMMEDIATE for mutations; rollback the whole attempt on failure and invalidate handles. Retry only busy failures with no external calls. Read views must be read-only database transactions, not unprotected multi-query snapshots. Reject nested callbacks and async continuation writes as in memory.
+- [x] Run both adapter suites plus strict checks. Verify process/connection cleanup preserves shared WAL state; never delete live sidecars as a cleanup shortcut.
+- [ ] Commit as `feat(store): enforce atomic SQLite ledger transactions` only after explicit maintainer approval.
 
 ## Task 5: Trusted configuration and atomic authorization
 
@@ -408,3 +410,118 @@ Independent read-only review found no critical or important issues in Task 1 or 
 Review boundaries accepted: memory transactions (Task 2), SQLite persistence (Tasks 3–4), atomic admission and clock enforcement (Task 5), execution claims (Task 6), reconciliation (Task 7), recovery/outbox (Task 8), process races/crashes (Task 9) and compiled ledger smoke coverage (Task 10) remain unimplemented and unverified. Protocol equivalence, signing, authentication, provider finality, real-fund safety, approvals, adaptation, multi-asset/fees and unfinished scratch tests are outside this milestone; they are not implied by the review.
 
 Final wrap-up verification: `bun run check` passed with 267 tests across 15 files, 622 assertions and zero failures; all 13 core sources passed inventory. Formatting, build, lint, types and built-package smoke passed. `bun run demo` retained the three expected mock decisions; `git diff --check` passed. All 11 old test paths are absent with their destination files present. HEAD remains `2dcbc9a`; no wrap-up changes were staged or committed.
+
+### Task 2 — Transaction ports and memory adapter
+
+Initial intent: give the existing ledger rules a reliable internal state boundary before adding SQLite or financial admission. Expected outcome: a typed synchronous store with atomic batches, rollback, immutable snapshots, scope isolation and closed-handle protection, verified by tests reusable against SQLite.
+
+Implemented: the shared ports and redacted `LedgerError` in core; private `@scuta/store` with separate table, read, write and callback-lifetime modules. Records cover configuration/history, intents, reservations/allocations, execution identities, observations, events/outbox, wallet clocks and faults. Mutable batches check expected revision/state/token; immutable identities support identical replay only. Any apply failure poisons the callback, so catching it cannot commit earlier writes.
+
+Design refinements: allocation queries/writes and observation writes carry wallet ownership, allowing local IDs to repeat safely across wallets. Calculated cutoffs permit negative safe integers; worker limits are 1–1000 and identifier tie-breaking is case-sensitive rather than locale-dependent. Snapshots use checked explicit inert-data copying; the one generic type assertion is localized to that value-preserving boundary, not financial decoding. No dependency version changed; the lockfile only adds the local store workspace.
+
+Test progression: absent imports first exposed the missing adapter, then a typed temporary factory produced 13 behavioral failures before implementation. The initial full fixture exposed native clone corruption of a shared scope; explicit copying fixed it. Further regression tests first failed for negative cutoffs and locale ordering, then passed after their fixes. TypeScript closure narrowing was resolved through the existing transaction gate; lint required a named payment-profile type and explicitly awaited operations instead of Bun matcher assertions with non-Promise typings. No rule was disabled.
+
+Independent read-only review found no critical findings and two important compatibility issues: budget-denied records must retain static ALLOW provenance, and profile/delegation-denied requests must remain storable tombstones. Four shared regression cases failed first, then passed after refining intent checks. Denied records retain canonical input and ownership but cannot have holds; admitted records and execution references remain strict. No minors were reported.
+
+Verification: `bun run check` passed with **295 tests, 772 assertions, 17 files and zero failures**; all **19 implementation sources** (14 core, five store) appear in the coverage inventory. Build, formatting, lint, types and emitted core/store smoke passed. Frozen installation and the unchanged mock demo passed; whitespace checks passed. These are local results, not branch-coverage, durability, concurrency or real-payment safety proof.
+
+Run the focused adapter suite after building:
+
+```sh
+bun run build
+bun test packages/store/test/memory-store.test.ts
+bun run check
+```
+
+Review boundaries accepted: SQLite/reopen/process durability (Tasks 3–4 and 9), financial budget admission/configuration enforcement (Task 5), trusted-time advancement and execution deadlines (Tasks 5–6), reconciliation authenticity and containment orchestration (Task 7), fresh outbox tokens/lease workers (Task 8), and compiled reservation smoke/Linux evidence (Task 10) remain pending. Signing, protocol semantics, HTTP authentication, approvals and adaptation belong to later phases. This internal typed store does not sandbox hostile Proxy traps or arbitrary trusted callback code; persisted-row decoding is Task 3. Memory is a nondurable test adapter, not a production payment store.
+
+Task 2 is implemented but uncommitted on `feat/atomic-budget-reservations`, based on `a38ce14`. The earlier ignored test scaffolding is superseded by the runnable shared suite and retained only as historical scratch. Next: SQLite schema, migrations and row codecs; no new commit or external mutation was authorized.
+
+### Task 3 — SQLite schema, migrations and row codecs
+
+Initial intent: establish exact, checked persistence before implementing the SQLite transaction port. Expected outcome: one repeatable migration, relational ownership/uniqueness constraints and private codecs that reject inconsistent records without losing money precision.
+
+Implemented: 16 STRICT tables including migration history, four lookup indexes, immediate migration transactions, enabled foreign keys, bounded busy errors and exact schema/history verification. Deferred references support coherent cyclic intent/reservation/execution insertion. All 15 record kinds have typed codecs: money is canonical decimal TEXT, metadata is checked safe integers, and relational columns must agree with a bounded canonical JSON payload. Decoding reconstructs immutable records, validates states and digests, and redacts failures. Helpers remain private; no SQLite `LedgerStore` factory is exported.
+
+Design choices: typed payloads plus indexed camelCase columns avoid binding financial bigint as SQLite INTEGER, at the cost of duplicated metadata and decode checks. Canonical payloads are bounded to 128 KiB, depth 32 and record arrays of 100 entries. Schema changes require a new version; migrations refuse unrelated databases or altered objects rather than silently repairing them.
+
+Test progression: missing modules established absence, then typed stubs produced 39 behavioral failures before implementation. A runtime codec-kind allowlist fixed an independently failing inherited-property selector case. Driver-safe bigint metadata, denied-intent provenance, structural wallet inputs and duplicate JSON keys have regressions. Type/lint fixes preserved strict rules; no dependency or coverage exclusion was added.
+
+Independent read-only review found no critical issue, one important schema-filter bug and one minor overlapping-constraint test. SQL LIKE treated the underscore in the reserved prefix as a wildcard, hiding ordinary sqlite-like tables/triggers. Three regressions failed first, then passed with exact prefix filtering. The execution/reservation uniqueness test now uses a different nonce and recomputed digests, asserting the intended constraint rather than incidentally hitting nonce uniqueness.
+
+Focused verification: **62 migration/codec tests, 150 assertions, zero failures**. These include real temporary SQLite files, close/reopen, repeated migration, contention, ownership and uniqueness, exact 2^53+1/max-256-bit amounts, corrupt rows and migration tampering.
+
+Full verification: frozen installation made no dependency changes; `bun run check` passed with **357 tests, 922 assertions, 19 files and zero failures**. Build, formatting, lint, types, all **25 implementation sources** in coverage inventory (14 core, 11 store), and emitted core/store smoke passed. These local checks do not establish branch coverage, full financial enforcement, crash durability or real-fund safety.
+
+Run from the repository root:
+
+```sh
+bun run build
+bun test packages/store/test/migrations.test.ts packages/store/test/row-codecs.test.ts
+bun run check
+```
+
+Review boundaries accepted: guarded SQLite queries/batches, compare-and-set writes, callback lifetimes, bounded transaction retries and remaining cross-record financial checks belong to Task 4. WAL/FULL settings and process race/crash evidence remain Tasks 4 and 9. Budget admission and trusted time (Tasks 5–6), reconciliation authenticity/containment (Task 7), outbox/orphan workers (Task 8), and Linux/complete ledger smoke (Tasks 9–10) are not established here. Signing, provider finality, authentication, approvals and adaptation are later phases. Inert-data codecs do not sandbox hostile callbacks/Proxy traps or privileged database administrators.
+
+Task 3 changes remain uncommitted alongside Task 2. Next: implement the SQLite transaction adapter against the existing shared store contract; no payment or authorization coordinator is implemented by this step.
+
+### Task 4 — SQLite transaction adapter
+
+Initial intent: turn the checked SQLite records into a real implementation of the existing synchronous store port. Expected outcome: the same observable contract as memory, plus file-backed commits, stable read snapshots, exact reopen behavior and bounded contention without exposing raw database access.
+
+Implemented: `openSqliteStore({ path, busyTimeoutMs?, maxAttempts? })` in the private store package. Separate connection, prepared-query, read, write and callback-lifetime modules keep responsibilities focused. Connections require WAL, FULL synchronous mode and foreign keys; money remains checked decimal TEXT. Writes start with `BEGIN IMMEDIATE`; reads use deferred query-only transactions. Batches enforce immutable records, expected revisions/states/tokens and affected cross-record ownership, budget membership and execution bindings. Any failed apply poisons the callback, even when its exception is caught.
+
+Contention retries at most three entire rolled-back attempts, not individual statements. Real busy provenance stays private while callbacks receive redacted failures. Every attempt has new handles; ended or rejected asynchronous callbacks cannot resume reads/writes. There are no external side effects inside callbacks. Close is idempotent and never deletes WAL files belonging to other live connections.
+
+Test progression: typed stubs produced 46 failures before implementation. Two additional shared regressions exposed an empty-allocation read bypassing lifetime checks and delivered-outbox replay comparing structural wallet extras; both passed after targeted fixes. A test-only fault at the driver boundary then reproduced busy-error provenance being lost during redaction. Both uncaught and caught apply failures now roll back and retry completely, without adding injection APIs to production. Strict checks caught an unused import, snake-case SQLite result labels and a closure-narrowing issue; explicit aliases and a typed retry-state container fixed them without weakening rules.
+
+Pre-review verification: **409 tests, 1,129 assertions, 20 files, zero failures**; all **30 implementation sources** (14 core, 16 store) pass coverage inventory. Build, formatting, lint, types and emitted core/store smoke passed. The SQLite suite has **50 tests**, including 25 shared contract cases; the new driver-boundary fault is injected only in tests, while locking, queries, transactions and rollback use real SQLite.
+
+Run from the repository root:
+
+```sh
+bun run build
+bun test packages/store/test/memory-store.test.ts packages/store/test/sqlite-store.test.ts
+bun run check
+```
+
+Independent read-only review found no Critical or Important issues and one Minor. The reviewer independently ran both adapter suites: **75 passed, zero failures, 347 assertions**. Additional disposable-file probes confirmed nested snapshot immutability and rejection of validly digested but wrong recipient/signer bindings, with the original reservation still RESERVED.
+
+Review checkpoint finding (resolved in the follow-up below): migration initialization reset the SQLite busy timeout to 50 ms, even when a lower override was requested. Defaults and the maximum attempt count stayed bounded, but the reduced startup override was not honored.
+
+Accepted review boundaries:
+
+- Complete budget admission and all-applicable account membership belong to Task 5. The trusted internal port can persist a reservation without allocations if supplied that batch; it validates supplied links, not completeness of admission. Never expose this port as an agent authorization API.
+- Denied-key revival, policy re-evaluation, ceiling enforcement and configuration membership changes require Task 5's coordinator.
+- Trusted-clock advancement and claim/deadline/cancellation/expiry decisions require Tasks 5–6; stored clock monotonicity and lifecycle checks are only prerequisites.
+- Evidence authenticity, contradiction detection and committed containment require Task 7; immutable evidence alone is not containment.
+- Expired acknowledgments, fresh lease tokens and orphan recovery decisions require Task 8; token fences and selections do not implement those operations.
+- Independent-process races, killed-writer/commit-before-response recovery and power-loss evidence remain Task 9. Complete emitted-ledger reservation smoke and Linux/hosted evidence remain Tasks 9–10.
+- Signing, protocol equivalence, provider finality, authentication, approvals and adaptation are later phases. Hostile callbacks/Proxy traps, privileged database rewriting, network filesystems, multi-host deployment and scalability claims are outside this trusted local-store contract.
+
+Frozen installation was unchanged; the emitted SQLite factory separately passed a temporary-file wallet write/close/reopen smoke. The existing static demo passed, as did three repeated SQLite suite runs (50/50 each) and whitespace checks. No source/test weakening, new dependency, stage, commit, push or PR. At this checkpoint Task 4 was accepted with the minor deferred; it is resolved below. Next is Task 5, trusted configuration and atomic financial admission.
+
+### Startup timeout fix and implementation audit
+
+The maintainer requested the timeout fix, a regression and a project-status audit, without committing. Root cause: connection setup selected the requested timeout, but migration unconditionally replaced it with 50 ms. Migration now accepts a validated integer timeout in 0–50 ms, defaulting to 50, and connection setup forwards its selection on every attempt. No schema definition/checksum, dependency, retry count or financial behavior changed.
+
+Tests first observed both requested 0 ms and 7 ms becoming 50 ms on both startup attempts; the default-50 control passed. The fix makes all three pass under real retained-writer contention. Five additional failing-first cases reject negative, excessive, fractional and nonfinite timeout values before changing schema. Instrumentation observes the real connection just before migration constructs its immediate transaction and forwards the original driver wrapper untouched; no wall-clock threshold or fake lock is used. The first harness tried to wrap Bun's nonconfigurable immediate property; it was corrected before establishing the genuine regression.
+
+Verification: targeted migration/SQLite suites **84 passed, 286 assertions**; full `bun run check` **417 passed, zero failures, 1,153 assertions, 20 files**. Build, formatting, lint, types, coverage inventory for all **30 implementation sources**, and existing built-package smoke passed. This follow-up is a tested repair of the previous review finding, not a new independent security audit.
+
+Implementation/status audit, based on public exports, implementation files, tests, scripts, CI configuration and the approved roadmap:
+
+| Area                     | Implemented and supported by local tests                                                                                                                                         | What cannot yet be inferred                                                                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Static policy            | Runtime validation, scope/delegation checks, hard/autonomous ceilings, recipient rules and explained decisions                                                                   | Host scope is not authentication; static ALLOW is not execution authority; REQUIRE_APPROVAL does not contact a human                                            |
+| Money and exposure       | Bounded exact bigint amounts, text persistence, rolling spend/live-hold arithmetic and safe expiry helpers                                                                       | Calculations require complete allocations; no integrated admission or wallet-balance verification                                                               |
+| Record identity          | Canonical digests, immutable history, scoped unique retry keys, reservation/execution/nonce constraints                                                                          | Hashes are not authentication or protocol equivalence; constraints do not implement logical retry/claim orchestration                                           |
+| Storage                  | Memory and SQLite transaction ports, atomic batches, rollback poisoning, snapshot reads, revision/state/token fences, checked rows, ordinary close/reopen and bounded contention | No complete budget allocation requirement; no independent-process crash, power-loss, multi-host or production performance proof                                 |
+| Events and recovery data | Persisted event/outbox/evidence/clock/fault records and worker selection queries                                                                                                 | No trusted reconciliation, containment coordinator, outbox lease worker, orphan recovery or automatic clock advancement                                         |
+| Tooling                  | Bun/TypeScript, component test folders, style/type/JSDoc checks, source inventory, static demo and configured GitHub Actions                                                     | Automated emitted-store smoke exercises memory; complete emitted-ledger/SQLite reservation smoke remains Task 10. Remote Linux CI results were not checked here |
+
+Phase status: Phase 0 is implemented; Phase 1 Tasks 1–4 are implemented, while Tasks 5–10 remain. Tasks 5–8 must add trusted configuration/admission, revalidated execution claims, reconciliation/containment and recovery/outbox operations. Task 9 must prove overlapping independent-process races and kill/restart recovery; Task 10 closes compiled-consumer, CI and documentation evidence gaps. A configured workflow is not a verified remote run.
+
+Later phases remain designs: isolated gateway and mock x402 payment (2), durable authenticated approvals (3), behavior-based authority/recovery (4), and comparative evaluation, overhead measurements, contributor testkit and one verified external integration (5). Core/adapter separation does not imply compatibility with every wallet or payment protocol.
+
+Conclusion: the project has tested policy/accounting primitives and local transactional storage, not yet an enforceable adaptive authorization product. The decisive next demonstration is Task 5 admission: two 70-unit requests against a 100-unit wallet budget yield one hold and one denial, with every applicable account updated atomically. After coordinator tests, repeat it across processes in Task 9. Adaptive benefit over a strong static policy, legitimate task completion, approval burden and false restrictions remain research questions.
