@@ -4,7 +4,7 @@
 
 Scuta is being built to control agent transactions using observed behavior and financial exposure: enforce owner-defined limits, account for pending and uncertain payments, and adjust how much an agent may spend without human approval.
 
-**Status: Phase 0 implemented; Phase 1 contracts and pure helpers implemented.** The private TypeScript core validates wire inputs, checks delegation and static owner policy, and returns explained `ALLOW`, `DENY`, or `REQUIRE_APPROVAL` evaluations. Ledger contracts, exact exposure calculations, lifecycle rules and execution-binding digests are available; persistent stores and atomic reservations are not. Adaptation, shared budgets, approvals, gateway isolation and payment execution are still planned. An `ALLOW` result is not permission to sign.
+**Status: Phase 0 implemented; Phase 1 contracts, pure helpers, memory and SQLite transaction adapters implemented.** The private TypeScript core validates inputs, checks delegation and static owner policy, and returns explained `ALLOW`, `DENY`, or `REQUIRE_APPROVAL` evaluations. The internal SQLite store adds checked records, atomic batches, snapshot reads, revision fences and bounded contention handling; memory remains a nondurable test adapter. Atomic financial admission, shared-budget enforcement, recovery workers, approvals, adaptation, gateway isolation and payment execution remain pending. The store alone is not a payment deployment, and an `ALLOW` evaluation is not permission to sign. See the [Phase 1 record](docs/development/phase-1.md#task-4--sqlite-transaction-adapter).
 
 ## Try Phase 0
 

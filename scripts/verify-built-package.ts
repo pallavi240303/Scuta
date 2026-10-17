@@ -42,5 +42,60 @@ export async function verifyBuiltPackage(
 
 if (import.meta.main) {
   await verifyBuiltPackage();
-  console.log("Built public package smoke check passed.");
+  await verifyBuiltStore();
+  console.log("Built core and store package smoke checks passed.");
+}
+
+/** Verify the emitted store can atomically persist and read mock wallet configuration.
+ * @param entry - Built store URL, never a source fallback.
+ * @returns Nothing after successful verification and store closure.
+ * @throws {Error} If built exports or transaction behavior are missing.
+ */
+export async function verifyBuiltStore(
+  entry = new URL("../packages/store/dist/index.js", import.meta.url),
+): Promise<void> {
+  const imported: unknown = await import(entry.href);
+  if (
+    typeof imported !== "object" ||
+    imported === null ||
+    !("createMemoryStore" in imported) ||
+    typeof imported.createMemoryStore !== "function"
+  )
+    throw new Error("Missing built store export");
+  const built = imported as typeof import("../packages/store/dist/index.js");
+  const store = built.createMemoryStore();
+  const wallet = {
+    ownerId: "smoke-owner",
+    walletId: "smoke-wallet",
+    network: "mock:local",
+    asset: "mock:usd",
+    signerId: "mock-signer",
+    reservationTtlMs: 60_000,
+    executionTtlMs: 60_000,
+    orphanAfterMs: 60_000,
+  };
+  try {
+    store.transaction((tx) =>
+      tx.apply({
+        wallets: [wallet],
+        policies: [],
+        delegations: [],
+        budgets: [],
+        intents: [],
+        reservations: [],
+        allocations: [],
+        executions: [],
+        observations: [],
+        events: [],
+        outbox: [],
+        clocks: [],
+        faults: [],
+      }),
+    );
+    const read = store.read((tx) => tx.getWallet(wallet));
+    if (read?.signerId !== "mock-signer" || read === wallet || !Object.isFrozen(read))
+      throw new Error("Incorrect built store transaction");
+  } finally {
+    store.close();
+  }
 }

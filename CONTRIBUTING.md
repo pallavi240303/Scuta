@@ -6,8 +6,8 @@ Scuta is building behavior-adaptive authorization for agent payments, bounded by
 
 Every contribution must strengthen **authorization, exposure accounting, adaptive authority, approval safety, or verification**. Read the [goals and boundaries](docs/how-scuta-works.md) and [implementation roadmap](docs/core-authorization-design.md#17-implementation-phases) before proposing work.
 
-- **Implemented:** the TypeScript static-policy core, input validation, delegation checks, canonical binding, ledger contracts and pure exposure/lifecycle helpers. Current contributions can add boundary/regression tests, focused fixes, clearer contracts and accurate documentation.
-- **Next:** implement the agreed authoritative SQLite ledger, atomic budget holds, scoped retries and crash recovery. Follow the [Phase 1 plan](docs/development/phase-1.md); discuss contract changes before implementation.
+- **Implemented:** the TypeScript static-policy core, validation, delegation checks, canonical binding, ledger contracts, pure exposure/lifecycle helpers, nondurable memory adapter, and SQLite schema/codecs/transaction adapter. Contributions can add boundary/regression tests, focused fixes, clearer contracts and accurate documentation.
+- **Next:** build trusted configuration and atomic budget admission on the shared transaction contract, then execution claims, reconciliation and crash recovery. Storage transactions alone do not authorize spending. Follow the [Phase 1 plan](docs/development/phase-1.md); discuss contract changes before implementation.
 - **Later:** isolated execution, the bounded x402 integration, durable approvals, deterministic adaptation and evaluation. Propose scenarios now; do not add later-phase infrastructure before its contracts are agreed.
 
 The initial reference release targets one gateway/store, one configured payment profile and one verified external sandbox/testnet integration. The pure core stays separate from storage, networking and provider SDKs.
