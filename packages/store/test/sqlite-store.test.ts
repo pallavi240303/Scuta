@@ -378,26 +378,27 @@ test.each([false, true])(
     }
     writer.exec("ROLLBACK");
     if (!(busy instanceof SQLiteError)) throw new Error("fixture did not observe real contention");
-    const original = Object.getOwnPropertyDescriptor(Database.prototype, "query");
+    const originalQuery = Object.getOwnPropertyDescriptor(Database.prototype, "query");
+    const original = Object.getOwnPropertyDescriptor(Database.prototype, "prepare");
     if (!original || typeof original.value !== "function") throw new Error("missing driver method");
-    const query: unknown = original.value;
-    if (typeof query !== "function") throw new Error("invalid driver method");
+    const prepare: unknown = original.value;
+    if (typeof prepare !== "function") throw new Error("invalid driver method");
     const r = createStoreRecords();
     let injected = false;
     let attempts = 0;
     const handles: LedgerTransaction[] = [];
-    Object.defineProperty(Database.prototype, "query", {
+    Object.defineProperty(Database.prototype, "prepare", {
       ...original,
       /** Inject one real busy exception at a driver write boundary, leaving all other operations real.
        * @param sql - Prepared SQL issued by the adapter.
        * @returns The genuine driver statement unless this is the selected fault.
        */
-      value: function queryWithFault(this: Database, sql: string): unknown {
-        if (!injected && sql.startsWith("INSERT INTO wallet_clocks")) {
+      value: function prepareWithFault(this: Database, sql: string): unknown {
+        if (!injected && sql.startsWith('insert into "wallet_clocks"')) {
           injected = true;
           throw busy;
         }
-        return Reflect.apply(query, this, [sql]);
+        return Reflect.apply(prepare, this, [sql]);
       },
     });
     try {
@@ -428,7 +429,9 @@ test.each([false, true])(
         count: 1,
       });
     } finally {
-      Object.defineProperty(Database.prototype, "query", original);
+      Object.defineProperty(Database.prototype, "prepare", original);
     }
+    expect(Object.getOwnPropertyDescriptor(Database.prototype, "prepare")).toEqual(original);
+    expect(Object.getOwnPropertyDescriptor(Database.prototype, "query")).toEqual(originalQuery);
   },
 );

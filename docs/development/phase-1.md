@@ -2,7 +2,7 @@
 
 Status: design and implementation plan approved on 12 October 2026; native implementation with independent subagent review selected. Phase 1 implementation is in progress. This is the single Phase 1 design, implementation and outcome record.
 
-On 12 October 2026, the maintainer confirmed SQLite and approved the design and implementation plan. Tasks 1–4 are implemented and independently reviewed locally: contracts, the memory adapter, SQLite schema/codecs and the SQLite transaction adapter. The financial coordinator remains pending. The earlier wrap-up was committed with approval; Tasks 2–4 changes are uncommitted. The reviewed startup-timeout finding was subsequently fixed with regression tests; see the [current audit](#startup-timeout-fix-and-implementation-audit).
+The maintainer approved SQLite and the plan on 12 October 2026. Tasks 1–4 and the startup-timeout repair are committed through `9d696b8`. Task 5 trusted configuration/atomic admission and the requested store-only Drizzle refactor are implemented, independently reviewed and verified locally; no new commit is authorized. Execution claims, reconciliation, recovery/outbox workers and process race/crash verification remain pending. See the [latest Task 5 record](#task-5--trusted-configuration-and-atomic-admission); earlier audit sections preserve their checkpoint context.
 
 [Project objective](../how-scuta-works.md#1-objective-and-success-criteria) · [System invariants](../core-authorization-design.md#3-invariants) · [Roadmap](../core-authorization-design.md#17-implementation-phases)
 
@@ -37,7 +37,7 @@ One configured network/asset per wallet, exact transfer amount, and no agent-fun
 | `packages/store/src/row-codecs.ts`      | Runtime validation and decimal-text decoding of persisted rows.                                                  |
 | `packages/store/test/`                  | Adapter contract, real SQLite, independent-process and crash tests; worker fixtures are not test entry files.    |
 
-Private `@scuta/store` depends on the built `@scuta/core`. Build core before store; verify both emitted entry points. Keep product code, tests and examples in TypeScript, precise JSDoc above functions/types and file overviews. No ORM, additional package manager, public package publication or speculative package scaffolding.
+Private `@scuta/store` depends on the built `@scuta/core`. Build core before store; verify both emitted entry points. Keep product code, tests and examples in TypeScript, precise JSDoc above functions/types and file overviews. The maintainer subsequently selected Drizzle for store-only typed record queries; retain checked DDL/migrations and the core transaction port. No additional package manager, public package publication or speculative package scaffolding.
 
 ## Amounts, time and budgets
 
@@ -128,7 +128,7 @@ A generic timeout, expired execution lease, resource error, TTL or agent report 
 
 ## SQLite choice and transactional behavior
 
-Use the built-in `bun:sqlite` driver with the pinned Bun toolchain: no native addon installation or new driver dependency. Its synchronous transaction functions fit the bounded local coordinator. Node runtime portability and ORM abstractions are not promised. SQLite's integer range is narrower than the core amount range, motivating decimal text rather than direct bigint binding. See [Bun SQLite](https://bun.sh/docs/api/sqlite).
+Use the built-in `bun:sqlite` driver with the pinned Bun toolchain: no native addon installation or new driver dependency. Its synchronous transaction functions fit the bounded local coordinator. Node runtime portability is not promised. The maintainer-selected Drizzle query layer wraps this driver without replacing checked migrations, row decoding or native transaction ownership. SQLite's integer range is narrower than the core amount range, motivating decimal text rather than direct bigint binding. See [Bun SQLite](https://bun.sh/docs/api/sqlite).
 
 Use a local file with WAL, `synchronous=FULL`, enabled foreign keys and validated schema. Use `BEGIN IMMEDIATE` for read-check-write admission, claims, transitions, configuration and migrations. SQLite serializes writers; an immediate transaction acquires write ownership before reading admission state. See [SQLite isolation](https://www.sqlite.org/isolation.html) and [transaction behavior](https://www.sqlite.org/lang_transaction.html).
 
@@ -175,7 +175,7 @@ Self-review clarified zero budget ceilings, deadline precision, transaction-hand
 
 **Architecture:** One trusted coordinator in core uses a synchronous transaction port. Memory and SQLite adapters implement the same port; lifecycle and admission rules are not duplicated in adapters. Financial changes, decisions and outbox work commit together.
 
-**Tech stack:** Existing Bun 1.3.14, TypeScript 6.0.3, Bun tests and strict tooling; built-in `bun:sqlite`, standard `node:crypto` and no new runtime dependency.
+**Tech stack:** Bun 1.3.14, TypeScript 6.0.3, Bun tests and strict tooling; built-in `bun:sqlite`, standard `node:crypto`, and maintainer-selected `drizzle-orm@0.45.4` confined to store queries. The original no-ORM choice is superseded; the checked physical schema remains unchanged.
 
 **Spec:** The design sections above in this same file, plus the linked canonical invariants. The single-file layout preserves the maintainer's phase-tracking preference.
 
@@ -509,7 +509,7 @@ Tests first observed both requested 0 ms and 7 ms becoming 50 ms on both startup
 
 Verification: targeted migration/SQLite suites **84 passed, 286 assertions**; full `bun run check` **417 passed, zero failures, 1,153 assertions, 20 files**. Build, formatting, lint, types, coverage inventory for all **30 implementation sources**, and existing built-package smoke passed. This follow-up is a tested repair of the previous review finding, not a new independent security audit.
 
-Implementation/status audit, based on public exports, implementation files, tests, scripts, CI configuration and the approved roadmap:
+Pre-Task-5 implementation/status audit (superseded by the admission outcome below), based on public exports, implementation files, tests, scripts, CI configuration and the approved roadmap:
 
 | Area                     | Implemented and supported by local tests                                                                                                                                         | What cannot yet be inferred                                                                                                                                     |
 | ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -525,3 +525,35 @@ Phase status: Phase 0 is implemented; Phase 1 Tasks 1–4 are implemented, while
 Later phases remain designs: isolated gateway and mock x402 payment (2), durable authenticated approvals (3), behavior-based authority/recovery (4), and comparative evaluation, overhead measurements, contributor testkit and one verified external integration (5). Core/adapter separation does not imply compatibility with every wallet or payment protocol.
 
 Conclusion: the project has tested policy/accounting primitives and local transactional storage, not yet an enforceable adaptive authorization product. The decisive next demonstration is Task 5 admission: two 70-unit requests against a 100-unit wallet budget yield one hold and one denial, with every applicable account updated atomically. After coordinator tests, repeat it across processes in Task 9. Adaptive benefit over a strong static policy, legitimate task completion, approval burden and false restrictions remain research questions.
+
+### Task 5 — Trusted configuration and atomic admission
+
+Initial intent: turn the exact storage foundations into the first actual financial admission operation. Expected outcome: two 70-unit purchases against a 100-unit shared ceiling produce one RESERVED hold and one budget denial, with no partial allocations or refreshed retry lifetime.
+
+Implemented `createLedger({ store, now, createId })` in core, split into configuration, admission, event and shared-check modules. The trusted host configures one wallet profile, exactly one wallet budget and optional agent/delegation accounts. `authorize` derives membership from persisted scope and re-evaluates current static policy inside one transaction. It records the original decision, every required allocation, ordered event, pending outbox work and clock advance atomically. IDs must be unique opaque identifiers; callbacks remain synchronous and free of external side effects.
+
+- Same scoped key/purchase returns the original decision and current lifecycle without new IDs, events, holds or expiry. Changed purchases return `IDEMPOTENCY_CONFLICT`; repeated identical conflicts generate only one event.
+- Denied and approval-required keys remain non-executable after later policy changes. Approval-required has no hold or human-delivery hook in this phase.
+- Configuration identity/window/profile cannot be replaced. Membership declarations are complete: additions only before any retained intent; removals unsupported. Ceiling updates retain the same account/history and increment its revision. Delegation changes/revocation increment revisions; identical initialization/activation is a no-op.
+- Insufficient headroom in any account denies without allocating in another. Zero closes admission; lowering a ceiling never erases holds. A latched wallet fault blocks new admission; contradiction detection belongs to Task 7.
+- Reservation expiry is the minimum of configured TTL, intent expiry and delegation expiry. Read-only status/exposure never expire holds or advance time. New mutations and exposure reads reject clock regression; unchanged retries/no-ops need no clock advance.
+
+The maintainer requested Drizzle after Task 4: `drizzle-orm@0.45.4` is pinned only in store. Typed mappings/queries replace record-query strings; native transaction controls and the reviewed/checksummed physical schema stay unchanged. Required full row types and codecs preserve exact money and reject inconsistent stored metadata. Cost/rationale: [technology decisions](../technology-decisions.md#drizzle-query-layer).
+
+Test progression: typed coordinator stubs produced 45 behavioral failures, then 45 passes. Another 22 boundary probes cover zero ceilings, exact full-range money, all three expiry bounds, cross-agent shared limits, durable decision/conflict outbox identity, sequence exhaustion, malformed inputs and missing configuration. The shared adapter suite also checks the four new membership/history/event reads. Existing busy-fault tests now intercept Drizzle's actual native `prepare` boundary; real locks, writes and rollback remain in use.
+
+Independent read-only review found no Critical or Minor issues and one Important test-isolation defect: fault injection patched native `prepare` but restored `query`. Descriptor-restoration assertions failed in both fault scenarios before the fix; restoring the correct method makes both pass and leaves both native methods unchanged. The reviewer ran **183 tests / 719 assertions** independently; the post-fix focused suite passes **183 / 723**, without a second review round.
+
+Final fresh `bun run check`: **486 tests, zero failures, 1,427 assertions, 23 files**, with all **36 implementation sources** inventoried. Build, formatting, strict lint/types and emitted core/store smoke passed. Coordinator integration tests explicitly import source for accurate coverage; compiled package smoke remains separate. Frozen installation was unchanged, the static demo passed, and all 77 local documentation targets/anchors resolved. A separate emitted-coordinator admission/retry/exposure smoke passed against both stores; the complete lifecycle/CI release gate remains Task 10.
+
+```sh
+bun run build
+bun test packages/store/test/authorization.test.ts packages/store/test/configuration.test.ts packages/store/test/admission-boundaries.test.ts
+bun run check
+```
+
+Inference: admission now accounts for every configured applicable account atomically in the tested local flows, rather than merely computing headroom or storing caller-supplied batches. It does not check wallet solvency, authenticate callers, issue payment authority, execute funds or adapt limits from behavior. The static demo is unchanged.
+
+Accepted review boundaries: claims/cancellation/automatic expiry (Task 6); conflicting evidence and committed containment (7); stale outbox acknowledgments/redelivery/orphan workers (8); independent-process races, kill/commit-before-response and power-loss evidence (9); complete compiled lifecycle smoke and remote Linux results (10). Authentication, signer/provider/protocol verification, solvency, actual payments, approvals and adaptation remain later/excluded work. Multi-asset/fees, post-history membership migration, hostile executable callbacks/Proxy traps, privileged DB rewriting, network filesystems, multi-host deployment and production scalability remain outside this trusted local contract.
+
+Next is Task 6, not another payment integration or adaptive engine. No benchmark, hosted-wallet integration, approvals or adaptation is implied by this milestone. All Task 5 changes remain uncommitted; HEAD is still `9d696b8`, with nothing staged.

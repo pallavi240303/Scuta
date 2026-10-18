@@ -1,45 +1,60 @@
-/** @file Scope-bound SQLite snapshot reads and deterministic worker selections; no financial mutation. */
+/** @file Scope-bound Drizzle reads and deterministic worker selections, confined to the store layer. */
+import { and, or, eq, gt, lte, asc, desc, inArray, exists, sql, type AnyColumn } from "drizzle-orm";
+import { QueryBuilder } from "drizzle-orm/sqlite-core";
 import type { LedgerReadView, WalletScope, TrustedScope } from "@scuta/core";
 import { assertIdentifier, assertStore, scopeKey, walletKey } from "./memory-state.js";
+import { DRIZZLE_TABLES } from "./drizzle-schema.js";
 import type { SqliteQueries } from "./sqlite-queries.js";
 
-/** Trusted SQL ownership predicate shared by private row operations. */
-export const WALLET_WHERE = "ownerId=? AND walletId=?";
-/** Trusted SQL principal predicate, including agent and delegation. */
-export const SCOPE_WHERE = WALLET_WHERE + " AND agentId=? AND delegationId=?";
+/** Columns needed to bind wallet ownership, independent of a particular table. */
+interface WalletColumns {
+  readonly ownerId: AnyColumn;
+  readonly walletId: AnyColumn;
+}
+/** Columns needed to bind full principal ownership. */
+interface ScopeColumns extends WalletColumns {
+  readonly agentId: AnyColumn;
+  readonly delegationId: AnyColumn;
+}
 
-/** Validate and bind a wallet tuple without accepting SQL from callers.
- * @param wallet - Trusted ownership labels.
- * @returns Bound primitive identifiers.
+/** Build a bound wallet predicate using real typed table columns.
+ * @param table - Drizzle table with wallet ownership columns.
+ * @param wallet - Trusted wallet labels.
+ * @returns A parameterized ownership condition.
  */
-export function walletValues(wallet: WalletScope): readonly string[] {
+export function walletCondition(table: WalletColumns, wallet: WalletScope) {
   walletKey(wallet);
-  return [wallet.ownerId, wallet.walletId];
+  return and(eq(table.ownerId, wallet.ownerId), eq(table.walletId, wallet.walletId));
 }
 
-/** Validate and bind a full principal tuple.
+/** Build a bound full-principal predicate.
+ * @param table - Drizzle table with agent/delegation columns.
  * @param scope - Trusted full scope.
- * @returns Bound scope identifiers.
+ * @returns A parameterized scope condition.
  */
-export function scopeValues(scope: TrustedScope): readonly string[] {
+export function scopeCondition(table: ScopeColumns, scope: TrustedScope) {
   scopeKey(scope);
-  return [...walletValues(scope), scope.agentId, scope.delegationId];
+  return and(
+    walletCondition(table, scope),
+    eq(table.agentId, scope.agentId),
+    eq(table.delegationId, scope.delegationId),
+  );
 }
 
-/** Require safe query bounds without rejecting calculated negative cutoffs.
- * @param time - Time or calculated cutoff.
+/** Require safe worker bounds while allowing calculated pre-epoch cutoffs.
+ * @param time - Trusted time or calculated cutoff.
  * @param limit - Maximum one to one thousand results.
- * @param signed - Whether the cutoff can precede epoch zero.
+ * @param signed - Whether negative safe cutoffs are valid.
  */
 function checkQuery(time: number, limit: number, signed = false): void {
   assertStore(Number.isSafeInteger(time) && (signed || time >= 0));
   assertStore(Number.isSafeInteger(limit) && limit >= 1 && limit <= 1000);
 }
 
-/** Build the public read-only handle around checked prepared record operations.
- * @param queries - Callback-lifetime-owned typed queries.
- * @param assertOpen - Lifetime gate, including queries that may return without touching SQL.
- * @returns Frozen scope-bound read methods.
+/** Build lifetime-owned typed reads over the current SQLite transaction.
+ * @param queries - Store-only Drizzle operations.
+ * @param assertOpen - Lifetime gate for paths that may not execute a query.
+ * @returns Frozen read methods with checked immutable records.
  */
 export function createSqliteReadView(
   queries: SqliteQueries,
@@ -47,143 +62,204 @@ export function createSqliteReadView(
 ): LedgerReadView {
   return Object.freeze({
     getWallet(wallet) {
-      return queries.get("wallet", WALLET_WHERE, walletValues(wallet));
+      return queries.get("wallet", (t) => walletCondition(t, wallet));
     },
     getPolicy(scope) {
-      const values = scopeValues(scope);
-      const active = queries.get("activePolicy", SCOPE_WHERE, values);
+      const active = queries.get("activePolicy", (t) => scopeCondition(t, scope));
       if (!active) return null;
-      const record = queries.get("policySnapshot", SCOPE_WHERE + " AND policyId=? AND version=?", [
-        ...values,
-        active.policyId,
-        active.version,
-      ]);
+      const record = queries.get("policySnapshot", (t) =>
+        and(
+          scopeCondition(t, scope),
+          eq(t.policyId, active.policyId),
+          eq(t.version, active.version),
+        ),
+      );
       assertStore(record !== null && record.policy.digest === active.digest);
       return record;
     },
     getDelegation(scope) {
-      const values = scopeValues(scope);
-      const active = queries.get("activeDelegation", SCOPE_WHERE, values);
+      const active = queries.get("activeDelegation", (t) => scopeCondition(t, scope));
       if (!active) return null;
-      const record = queries.get("delegationSnapshot", SCOPE_WHERE + " AND revision=?", [
-        ...values,
-        active.revision,
-      ]);
+      const record = queries.get("delegationSnapshot", (t) =>
+        and(scopeCondition(t, scope), eq(t.revision, active.revision)),
+      );
       assertStore(record !== null);
       return record;
     },
     getBudget(wallet, accountId) {
       assertIdentifier(accountId);
-      return queries.get("budget", WALLET_WHERE + " AND accountId=?", [
-        ...walletValues(wallet),
-        accountId,
-      ]);
+      return queries.get("budget", (t) =>
+        and(walletCondition(t, wallet), eq(t.accountId, accountId)),
+      );
+    },
+    listBudgets(wallet) {
+      return queries.list("budget", (t) => walletCondition(t, wallet), {
+        orderBy: (t) => [asc(t.accountId)],
+      });
+    },
+    hasIntents(wallet) {
+      return queries.get("intent", (t) => walletCondition(t, wallet)) !== null;
+    },
+    getEvent(wallet, eventId) {
+      assertIdentifier(eventId);
+      return queries.get("event", (t) => and(walletCondition(t, wallet), eq(t.eventId, eventId)));
+    },
+    getLatestEvent(wallet) {
+      return queries.get("event", (t) => walletCondition(t, wallet), {
+        orderBy: (t) => [desc(t.sequence)],
+      });
     },
     getBudgets(scope) {
       scopeKey(scope);
       return queries.list(
         "budget",
-        WALLET_WHERE +
-          " AND (kind='WALLET' OR (agentId=? AND (kind='AGENT' OR delegationId=?))) ORDER BY accountId",
-        [...walletValues(scope), scope.agentId, scope.delegationId],
+        (t) =>
+          and(
+            walletCondition(t, scope),
+            or(
+              eq(t.kind, "WALLET"),
+              and(
+                eq(t.agentId, scope.agentId),
+                or(eq(t.kind, "AGENT"), eq(t.delegationId, scope.delegationId)),
+              ),
+            ),
+          ),
+        { orderBy: (t) => [asc(t.accountId)] },
       );
     },
     findIntent(scope, idempotencyKey) {
       assertIdentifier(idempotencyKey);
-      return queries.get("intent", SCOPE_WHERE + " AND idempotencyKey=?", [
-        ...scopeValues(scope),
-        idempotencyKey,
-      ]);
+      return queries.get("intent", (t) =>
+        and(scopeCondition(t, scope), eq(t.idempotencyKey, idempotencyKey)),
+      );
     },
     getIntent(scope, id) {
       assertIdentifier(id);
-      return queries.get("intent", SCOPE_WHERE + " AND intentId=?", [...scopeValues(scope), id]);
+      return queries.get("intent", (t) => and(scopeCondition(t, scope), eq(t.intentId, id)));
     },
     getReservation(scope, id) {
       assertIdentifier(id);
-      return queries.get("reservation", SCOPE_WHERE + " AND reservationId=?", [
-        ...scopeValues(scope),
-        id,
-      ]);
+      return queries.get("reservation", (t) =>
+        and(scopeCondition(t, scope), eq(t.reservationId, id)),
+      );
     },
     getExecution(scope, id) {
       assertIdentifier(id);
-      return queries.get("execution", SCOPE_WHERE + " AND executionId=?", [
-        ...scopeValues(scope),
-        id,
-      ]);
+      return queries.get("execution", (t) => and(scopeCondition(t, scope), eq(t.executionId, id)));
     },
-    getAllocations(wallet, accountIds, earliestCommittedAtMs) {
+    getAllocations(wallet, accountIds, cutoff) {
       assertOpen();
-      assertStore(Number.isSafeInteger(earliestCommittedAtMs));
-      const values = walletValues(wallet);
-      const allocations = [...new Set(accountIds)].sort().flatMap((accountId) => {
-        assertIdentifier(accountId);
+      walletKey(wallet);
+      assertStore(Number.isSafeInteger(cutoff));
+      const records = [...new Set(accountIds)].sort().flatMap((id) => {
+        assertIdentifier(id);
         return queries
           .list(
             "allocation",
-            WALLET_WHERE +
-              " AND accountId=? AND (state IN ('RESERVED','EXECUTING','PENDING_RECONCILIATION') OR (state='COMMITTED' AND committedAtMs>?)) ORDER BY reservationId",
-            [...values, accountId, earliestCommittedAtMs],
+            (t) =>
+              and(
+                walletCondition(t, wallet),
+                eq(t.accountId, id),
+                or(
+                  inArray(t.state, ["RESERVED", "EXECUTING", "PENDING_RECONCILIATION"]),
+                  and(eq(t.state, "COMMITTED"), gt(t.committedAtMs, cutoff)),
+                ),
+              ),
+            { orderBy: (t) => [asc(t.reservationId)] },
           )
-          .map((record) => record.allocation);
+          .map((row) => row.allocation);
       });
-      return Object.freeze(allocations);
+      return Object.freeze(records);
     },
     getObservation(wallet, id) {
       assertIdentifier(id);
       return (
-        queries.get("observation", WALLET_WHERE + " AND evidenceId=?", [
-          ...walletValues(wallet),
-          id,
-        ])?.observation ?? null
+        queries.get("observation", (t) => and(walletCondition(t, wallet), eq(t.evidenceId, id)))
+          ?.observation ?? null
       );
     },
     getClock(wallet) {
-      return queries.get("clock", WALLET_WHERE, walletValues(wallet));
+      return queries.get("clock", (t) => walletCondition(t, wallet));
     },
     getFault(wallet) {
-      return queries.get("fault", WALLET_WHERE, walletValues(wallet));
+      return queries.get("fault", (t) => walletCondition(t, wallet));
     },
     getOutbox(wallet, id) {
       assertIdentifier(id);
-      return queries.get("outbox", WALLET_WHERE + " AND eventId=?", [...walletValues(wallet), id]);
+      return queries.get("outbox", (t) => and(walletCondition(t, wallet), eq(t.eventId, id)));
     },
     listExpirable(wallet, nowMs, limit) {
       checkQuery(nowMs, limit);
       return queries.list(
         "reservation",
-        WALLET_WHERE +
-          " AND state='RESERVED' AND expiresAtMs<=? ORDER BY expiresAtMs,reservationId LIMIT ?",
-        [...walletValues(wallet), nowMs, limit],
+        (t) => and(walletCondition(t, wallet), eq(t.state, "RESERVED"), lte(t.expiresAtMs, nowMs)),
+        { orderBy: (t) => [asc(t.expiresAtMs), asc(t.reservationId)], limit },
       );
     },
     listOrphans(wallet, beforeMs, limit) {
       checkQuery(beforeMs, limit, true);
+      const reservations = DRIZZLE_TABLES.reservation;
       const executions = queries.list(
         "execution",
-        WALLET_WHERE +
-          " AND claimedAtMs<=? AND EXISTS (SELECT 1 FROM reservations r WHERE r.ownerId=executions.ownerId AND r.walletId=executions.walletId AND r.reservationId=executions.reservationId AND r.state='EXECUTING') ORDER BY claimedAtMs,reservationId LIMIT ?",
-        [...walletValues(wallet), beforeMs, limit],
+        (t) =>
+          and(
+            walletCondition(t, wallet),
+            lte(t.claimedAtMs, beforeMs),
+            exists(
+              new QueryBuilder()
+                .select({ id: reservations.reservationId })
+                .from(reservations)
+                .where(
+                  and(
+                    eq(reservations.ownerId, t.ownerId),
+                    eq(reservations.walletId, t.walletId),
+                    eq(reservations.reservationId, t.reservationId),
+                    eq(reservations.state, "EXECUTING"),
+                  ),
+                ),
+            ),
+          ),
+        { orderBy: (t) => [asc(t.claimedAtMs), asc(t.reservationId)], limit },
       );
       return Object.freeze(
         executions.map((execution) => {
-          const record = queries.get("reservation", SCOPE_WHERE + " AND reservationId=?", [
-            ...scopeValues(execution.binding.scope),
-            execution.binding.reservationId,
-          ]);
-          assertStore(record !== null && record.executionId === execution.executionId);
-          return record;
+          const reservation = queries.get("reservation", (t) =>
+            and(
+              scopeCondition(t, execution.binding.scope),
+              eq(t.reservationId, execution.binding.reservationId),
+            ),
+          );
+          assertStore(reservation !== null && reservation.executionId === execution.executionId);
+          return reservation;
         }),
       );
     },
     listDeliverable(wallet, nowMs, limit) {
       checkQuery(nowMs, limit);
+      const events = DRIZZLE_TABLES.event;
       return queries.list(
         "outbox",
-        WALLET_WHERE +
-          " AND (state='PENDING' OR (state='CLAIMED' AND leaseExpiresAtMs<=?)) ORDER BY (SELECT sequence FROM decision_events e WHERE e.ownerId=outbox_events.ownerId AND e.walletId=outbox_events.walletId AND e.eventId=outbox_events.eventId) LIMIT ?",
-        [...walletValues(wallet), nowMs, limit],
+        (t) =>
+          and(
+            walletCondition(t, wallet),
+            or(eq(t.state, "PENDING"), and(eq(t.state, "CLAIMED"), lte(t.leaseExpiresAtMs, nowMs))),
+          ),
+        {
+          orderBy: (t) => {
+            const sequence = new QueryBuilder()
+              .select({ sequence: events.sequence })
+              .from(events)
+              .where(
+                and(
+                  eq(events.ownerId, t.ownerId),
+                  eq(events.walletId, t.walletId),
+                  eq(events.eventId, t.eventId),
+                ),
+              );
+            return [sql`(${sequence})`];
+          },
+          limit,
+        },
       );
     },
   } satisfies LedgerReadView);

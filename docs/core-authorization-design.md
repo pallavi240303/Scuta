@@ -1,6 +1,6 @@
 # Scuta — Core Authorization Design
 
-**Status:** Complete-system design; implementation status updated 17 October 2026. Phase 0 provides validated inputs, static evaluation and local digest binding; Phase 1 adds ledger contracts, memory and SQLite transaction adapters. See the [Phase 0](development/phase-0.md) and [Phase 1](development/phase-1.md) records. The complete ledger, gateway, payment, approval and adaptive guarantees below are not implemented or proven yet.
+**Status:** Complete-system design; implementation status updated 17 October 2026. Phase 0 provides validated inputs, static evaluation and local digest binding; Phase 1 adds ledger contracts, memory and SQLite transaction adapters, trusted configuration and atomic budget admission. See the [Phase 0](development/phase-0.md) and [Phase 1](development/phase-1.md) records. The complete ledger, gateway, payment, approval and adaptive guarantees below are not implemented or proven yet.
 
 **Scope:** One TypeScript gateway and authoritative store, deterministic adaptive authority, durable approvals, a mock x402 profile, and one external sandbox/testnet integration before the first complete release. APIs below are proposed full-system contracts or pseudocode, not the Phase 0 public API; no hosted wallet provider is selected.
 
@@ -684,7 +684,7 @@ Anomaly detection can miss malicious payments resembling normal purchases. Expli
 
 This is the canonical six-phase roadmap. Tests grow with each phase; signer isolation enters with the first payment flow. README summarizes it; other guides link here rather than repeat acceptance gates.
 
-The [Phase 0 development record](development/phase-0.md) is the canonical place for that phase's initial intent, detailed design, expected and actual outcomes, and verification evidence. Its implemented toolchain uses Bun for package management, development execution, scripts, and tests, with separate TypeScript compiler checks. The [Phase 1 record](development/phase-1.md) distinguishes completed storage foundations from the remaining authorization coordinator and recovery work.
+The [Phase 0 development record](development/phase-0.md) is the canonical place for that phase's initial intent, detailed design, expected and actual outcomes, and verification evidence. Its implemented toolchain uses Bun for package management, development execution, scripts, and tests, with separate TypeScript compiler checks. The [Phase 1 record](development/phase-1.md) distinguishes completed storage/admission from the remaining execution, reconciliation, recovery and process-verification work.
 
 | Phase                           | Work                                                                                                                                                  | Acceptance gate                                                                                                                      |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |

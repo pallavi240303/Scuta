@@ -846,6 +846,71 @@ export function defineStoreContract(name: string, factory: () => LedgerStore): v
     }
   });
 
+  test(name + ": wallet-wide admission reads preserve ownership and ordered event identity", () => {
+    const store = factory();
+    const r = createStoreRecords();
+    const other = { ownerId: "other-owner", walletId: r.wallet.walletId };
+    try {
+      store.transaction((tx) => tx.apply(createInitialChanges(r)));
+      store.transaction((tx) =>
+        tx.apply(
+          createChanges({
+            budgets: [
+              {
+                account: {
+                  ...r.budget,
+                  accountId: "other-agent-budget",
+                  scope: {
+                    ownerId: r.scope.ownerId,
+                    walletId: r.scope.walletId,
+                    kind: "AGENT",
+                    agentId: "agent-2",
+                  },
+                },
+                expectedRevision: null,
+              },
+            ],
+            events: [
+              {
+                eventId: "late",
+                wallet: r.wallet,
+                sequence: 3,
+                kind: "DECISION",
+                subjectId: "intent-1",
+                occurredAtMs: r.intent.createdAtMs,
+                reason: null,
+              },
+              {
+                eventId: "early",
+                wallet: r.wallet,
+                sequence: 1,
+                kind: "CONFIGURATION",
+                subjectId: "wallet-1",
+                occurredAtMs: r.intent.createdAtMs,
+                reason: null,
+              },
+            ],
+          }),
+        ),
+      );
+      store.read((tx) => {
+        expect(tx.listBudgets(r.wallet).map((account) => account.accountId)).toEqual([
+          "other-agent-budget",
+          "wallet-budget",
+        ]);
+        expect(tx.listBudgets(other)).toEqual([]);
+        expect(tx.hasIntents(r.wallet)).toBe(true);
+        expect(tx.hasIntents(other)).toBe(false);
+        expect(tx.getLatestEvent(r.wallet)?.sequence).toBe(3);
+        expect(tx.getLatestEvent(other)).toBeNull();
+        expect(tx.getEvent(r.wallet, "early")?.sequence).toBe(1);
+        expect(tx.getEvent(other, "early")).toBeNull();
+      });
+    } finally {
+      store.close();
+    }
+  });
+
   test(name + ": an escaped read cannot bypass lifetime checks with an empty account list", () => {
     const store = factory();
     const saved: { view: LedgerReadView | null } = { view: null };

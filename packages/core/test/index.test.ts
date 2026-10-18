@@ -11,6 +11,7 @@ test("exports the supported runtime surface without execution credentials or int
       "computeIntentDigest",
       "computePolicyDigest",
       "evaluatePolicy",
+      "createLedger",
       "parseAtomicAmount",
       "serializeAtomicAmount",
       "validateDelegation",

@@ -1,6 +1,6 @@
 # Scuta — Technology Decisions
 
-Updated 17 October 2026. Phase 0 tooling, validation and hashing, plus Phase 1 contracts, the memory test store and SQLite transaction adapter, are implemented. Financial admission, gateway and payment implementation remain pending. No performance benefit is inferred from a stack choice. Every choice must support the [project goals](how-scuta-works.md#1-objective-and-success-criteria), state its cost, and have verification evidence.
+Updated 17 October 2026. Static policy, memory/SQLite transaction adapters, trusted configuration and atomic budget admission are implemented locally. Drizzle is the store-only query layer. Execution claims, reconciliation/recovery, gateway and payment implementation remain pending. No performance benefit is inferred from a stack choice. Every choice must support the [project goals](how-scuta-works.md#1-objective-and-success-criteria), state its cost, and have verification evidence.
 
 [Engineering contract](core-authorization-design.md) · [Phase 0 record](development/phase-0.md)
 
@@ -41,7 +41,7 @@ Snapshot copying explicitly accepts inert primitive/object/array data and preser
 
 ### SQLite schema and encoding
 
-- **Driver:** pinned Bun's built-in `bun:sqlite` avoids a native addon or ORM and fits synchronous local transactions. The internal SQLite adapter implements the store port without exposing its driver; this does not promise Node portability.
+- **Driver:** pinned Bun's built-in `bun:sqlite` avoids a native addon and fits synchronous local transactions; Drizzle supplies typed queries over this same driver. The internal SQLite adapter implements the store port without exposing its driver; this does not promise Node portability.
 - **Schema:** STRICT tables, compound ownership keys, uniqueness constraints and deferred foreign keys reject malformed relational records while allowing intent/reservation/execution links to commit in one batch. Adapters must still check cross-record financial semantics; foreign keys alone do not authorize a payment.
 - **Encoding:** canonical decimal TEXT preserves unsigned 256-bit money; safe-integer metadata stays INTEGER. Bounded canonical JSON retains complete typed records, while relational columns support lookups and independent validation. The cost is duplicated metadata and decode work; every column must match the validated payload.
 - **Integrity:** versioned SQL checksums and exact schema comparison reject changed or unexpected objects, rather than silently repairing history. This detects incompatible layouts, not privileged data tampering. An intentional schema change needs a new migration.
@@ -58,7 +58,15 @@ Busy handling retries complete rolled-back attempts at most three times, using a
 
 Migration receives the same validated timeout as connection setup, including every initialization retry; direct migration calls default to 50 ms. A regression observes the actual connection setting before each immediate migration attempt under real writer contention, covering 0 ms, 7 ms and the default. This is a SQLite lock-wait setting, not an end-to-end startup latency guarantee. The earlier mismatch is resolved in the [Task 4 follow-up](development/phase-1.md#startup-timeout-fix-and-implementation-audit).
 
-This is an internal storage port, not an admission engine: a trusted caller can submit a reservation without allocations. It validates supplied financial links but does not derive or require every applicable budget. Task 5 must perform that complete admission in one transaction before any execution integration is usable.
+The store remains an internal persistence port: it validates supplied links but does not derive complete budget membership. The new core coordinator derives all applicable accounts and reserves them in one transaction. Neither object belongs in the agent process as a credential-enforcement boundary.
+
+### Drizzle query layer
+
+**Decision:** pin `drizzle-orm@0.45.4` in `@scuta/store` only, as requested by the maintainer. Typed table columns, predicates and query builders replace hand-built record-query strings; the core has no ORM/driver dependency. Drizzle supports the existing synchronous Bun SQLite driver, so a different ORM/driver would add migration cost without a demonstrated need. [Drizzle Bun SQLite integration](https://orm.drizzle.team/docs/sqlite/connect-bun-sqlite).
+
+Keep the checked STRICT DDL and migration history authoritative; Drizzle mappings mirror that schema for queries rather than generating a replacement. Native PRAGMAs and transaction/migration control remain SQL inside the store. Bind values, retain exact decimal-text money, decode every returned row, and use affected-row checks for revision/state/token fences. ORM types do not replace runtime validation or financial admission.
+
+Cost: one runtime dependency and two schema representations to keep aligned. Codec/adapter tests verify every record kind, metadata agreement, rollback, busy retries, corruption rejection and reopen behavior. Intentional physical changes still require a reviewed migration; there is no `drizzle-kit push` or automatic schema repair. Reconsider the mapping arrangement only with a compatible migration-integrity plan.
 
 ## 2. Language and developer tooling
 
@@ -98,7 +106,7 @@ Test execution does not replace type checking. [TypeScript types](https://www.ty
 | Atomic-unit `bigint`, decimal-string boundaries | Exact amounts and explicit encoding                             | Validate bounds/canonical form; test beyond safe-integer range and database round trips                  |
 | Runtime schemas                                 | Input, policy and receipts remain untrusted despite types       | Explicit Phase 0 object validators; future receipt/HTTP schemas deferred; reject unknown security fields |
 | Versioned canonical digests                     | Bind identical semantics across retries, approval and decisions | Phase 0 fixed-order arrays and SHA-256; digests are not authentication; payment signing is deferred      |
-| Durable relational ledger                       | Atomic holds, identities, approvals and state                   | SQLite transactions implemented; admission and independent-process concurrency/crash evidence pending    |
+| Durable relational ledger                       | Atomic holds, identities, approvals and state                   | SQLite transactions and core admission implemented; independent-process race/crash evidence pending      |
 | Memory store                                    | Fast isolated tests and fault fixtures                          | Test-only; no restart or real-fund persistence guarantee                                                 |
 | Transactional outbox/workers                    | State and work commit together; external calls follow           | Repeated delivery needs event IDs/idempotent consumers and crash tests; not an external broker           |
 | Deterministic signals/authority states          | Explain and reproduce permission changes without inference      | Phase 4; measure missed attacks, false blocks, approval burden and recovery                              |
@@ -124,7 +132,7 @@ A hosted wallet can be the execution adapter while still settling on a blockchai
 
 Phase 0 uses small explicit validators rather than a schema dependency: the object contract is bounded and reviewable, with unknown-field, accessor, type and immutability tests. Its digests use fixed-order JSON arrays, decimal-string amounts, sorted recipient sets and domain-separated SHA-256 through `node:crypto`. This is local semantic binding, not authentication, an x402 signature, or an audit tree.
 
-HTTP framework, hosted wallet, approval channel and protocol/SDK versions remain open. The SQLite driver, first migration and transaction adapter are selected above; the financial coordinator remains pending. No ORM is required until it solves a demonstrated storage need.
+HTTP framework, hosted wallet, approval channel and protocol/SDK versions remain open. SQLite, Drizzle and the initial admission coordinator are selected/implemented above; execution and recovery coordinators remain pending.
 
 Choose tooling in Phase 0, storage in Phase 1, mock payment/HTTP in Phase 2, approval delivery in Phase 3, and the external integration by Phase 5. Record each choice, requirement, rejected alternative, operational cost and verification here; record actual results in the phase record.
 

@@ -117,6 +117,10 @@ export interface LedgerReadView {
   getDelegation(scope: TrustedScope): DelegationSnapshot | null;
   getBudgets(scope: TrustedScope): readonly BudgetAccount[];
   getBudget(wallet: WalletScope, accountId: string): BudgetAccount | null;
+  listBudgets(wallet: WalletScope): readonly BudgetAccount[];
+  hasIntents(wallet: WalletScope): boolean;
+  getEvent(wallet: WalletScope, eventId: string): LedgerEvent | null;
+  getLatestEvent(wallet: WalletScope): LedgerEvent | null;
   findIntent(scope: TrustedScope, idempotencyKey: string): IntentRecord | null;
   getIntent(scope: TrustedScope, intentId: string): IntentRecord | null;
   getReservation(scope: TrustedScope, reservationId: string): ReservationRecord | null;

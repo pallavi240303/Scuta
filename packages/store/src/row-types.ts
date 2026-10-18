@@ -17,6 +17,10 @@ import type {
   WalletFaultRecord,
 } from "@scuta/core";
 
+import type { InferSelectModel } from "drizzle-orm";
+import type { SQLiteUpdateSetSource } from "drizzle-orm/sqlite-core";
+import type { DRIZZLE_TABLES } from "./drizzle-schema.js";
+
 /** Scope-bound pointer to an immutable policy version and its computed digest. */
 export interface ActivePolicyRecord {
   readonly scope: TrustedScope;
@@ -54,6 +58,11 @@ export interface LedgerRecords {
 }
 /** Logical table kind, separate from physical SQL identifiers. */
 export type LedgerRecordKind = keyof LedgerRecords;
+/** Exact column models accepted by the typed store-only query mappings. */
+export type LedgerRows = {
+  readonly [K in LedgerRecordKind]: InferSelectModel<(typeof DRIZZLE_TABLES)[K]> &
+    SQLiteUpdateSetSource<(typeof DRIZZLE_TABLES)[K]>;
+};
 /** Runtime allowlist prevents inherited object properties from being treated as codec selectors. */
 export const LEDGER_RECORD_KINDS = Object.freeze([
   "wallet",

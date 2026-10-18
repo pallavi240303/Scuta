@@ -32,6 +32,12 @@ export {
 } from "./evaluate-policy.js";
 export { computeBudgetExposure } from "./budget.js";
 export {
+  createLedger,
+  type Ledger,
+  type LedgerDependencies,
+  type LedgerAuthorizationInput,
+} from "./ledger.js";
+export {
   LedgerError,
   type LedgerErrorCode,
   type PolicySnapshot,

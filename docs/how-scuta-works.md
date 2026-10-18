@@ -2,7 +2,7 @@
 
 > Adaptively authorize agent transactions using observed behavior and financial exposure, while enforcing owner-defined limits and accounting for unresolved payments.
 
-**Status:** Phase 0 static core and Phase 1 contracts, memory adapter and SQLite transaction adapter implemented; see the [Phase 0](development/phase-0.md) and [Phase 1](development/phase-1.md) records for evidence. TypeScript is the product language and Bun the development toolchain. The complete authorization lifecycle below remains a design: no live budget admission, signer, approvals or adaptive enforcement exists yet.
+**Status:** Static policy, trusted configuration and atomic all-budget admission are implemented against memory and SQLite; see the [Phase 0](development/phase-0.md) and [Phase 1](development/phase-1.md#task-5--trusted-configuration-and-atomic-admission) records. TypeScript is the product language, Bun the toolchain, and Drizzle is confined to SQLite record queries. The complete lifecycle below remains a design: execution claims, reconciliation, recovery, signer isolation, approvals and adaptation are not implemented yet. Local admission tests are not independent-process crash or real-payment evidence.
 
 [Engineering contract](core-authorization-design.md) · [Technology decisions](technology-decisions.md) · [Phase 0 record](development/phase-0.md) · [Contributing](../CONTRIBUTING.md)
 

@@ -1,5 +1,6 @@
-/** @file Guarded SQLite batches preserving immutable identities, revision fences and financial links. */
+/** @file Typed Drizzle batches preserving immutable identities, revision fences and financial links. */
 import { isDeepStrictEqual } from "node:util";
+import { and, eq, isNull } from "drizzle-orm";
 import {
   canTransitionReservation,
   type LedgerChanges,
@@ -12,13 +13,13 @@ import {
 import { assertStore, recordKey } from "./memory-state.js";
 import { encodeLedgerRow } from "./row-codecs.js";
 import type { SqliteQueries } from "./sqlite-queries.js";
-import { SCOPE_WHERE, WALLET_WHERE, scopeValues, walletValues } from "./sqlite-read.js";
+import { scopeCondition, walletCondition } from "./sqlite-read.js";
 
 /** Optional payment profile compared with immutable wallet configuration. */
 type PaymentProfile = Pick<WalletConfiguration, "network" | "asset">;
 
-/** Require a configured wallet and optional matching payment profile.
- * @param view - Current transaction's checked read methods.
+/** Require a configured wallet and optional matching profile.
+ * @param view - Current transaction's checked reads.
  * @param wallet - Record ownership.
  * @param profile - Required network/asset when applicable.
  */
@@ -29,13 +30,13 @@ function requireWallet(view: LedgerReadView, wallet: WalletScope, profile?: Paym
     assertStore(configured.network === profile.network && configured.asset === profile.asset);
 }
 
-/** Verify a reservation and its dependent records after a complete typed batch.
- * @param queries - Current callback's typed prepared statements.
- * @param view - Scoped reads on the same transaction.
- * @param reservation - Validated affected reservation.
+/** Verify affected reservation membership and immutable execution bindings.
+ * @param q - Current transaction's typed Drizzle operations.
+ * @param view - Reads on that same transaction.
+ * @param reservation - Affected validated reservation.
  */
 function verifyReservation(
-  queries: SqliteQueries,
+  q: SqliteQueries,
   view: LedgerReadView,
   reservation: ReservationRecord,
 ): void {
@@ -47,19 +48,16 @@ function verifyReservation(
       intent.intent.amountAtomic === reservation.amountAtomic &&
       intent.decision.evaluation.policyDigest === reservation.policyDigest,
   );
-  const policy = queries.get("policySnapshot", SCOPE_WHERE + " AND digest=?", [
-    ...scopeValues(scope),
-    reservation.policyDigest,
-  ]);
-  const delegation = queries.get("delegationSnapshot", SCOPE_WHERE + " AND revision=?", [
-    ...scopeValues(scope),
-    reservation.delegationRevision,
-  ]);
+  const policy = q.get("policySnapshot", (t) =>
+    and(scopeCondition(t, scope), eq(t.digest, reservation.policyDigest)),
+  );
+  const delegation = q.get("delegationSnapshot", (t) =>
+    and(scopeCondition(t, scope), eq(t.revision, reservation.delegationRevision)),
+  );
   assertStore(policy !== null && delegation !== null);
-  const allocations = queries.list("allocation", WALLET_WHERE + " AND reservationId=?", [
-    ...walletValues(scope),
-    reservation.reservationId,
-  ]);
+  const allocations = q.list("allocation", (t) =>
+    and(walletCondition(t, scope), eq(t.reservationId, reservation.reservationId)),
+  );
   for (const { allocation } of allocations) {
     const budget = view.getBudget(scope, allocation.accountId);
     assertStore(budget !== null);
@@ -71,10 +69,9 @@ function verifyReservation(
         allocation.state === reservation.state,
     );
   }
-  const executions = queries.list("execution", WALLET_WHERE + " AND reservationId=?", [
-    ...walletValues(scope),
-    reservation.reservationId,
-  ]);
+  const executions = q.list("execution", (t) =>
+    and(walletCondition(t, scope), eq(t.reservationId, reservation.reservationId)),
+  );
   if (reservation.executionId === null) {
     assertStore(executions.length === 0);
     return;
@@ -94,39 +91,33 @@ function verifyReservation(
   );
 }
 
-/** Check affected financial graphs, including unchanged dependents of a changed reservation.
- * @param queries - Current callback's typed prepared statements.
- * @param view - Current checked read view.
+/** Validate changed financial graphs and unchanged dependents before the batch can commit.
+ * @param q - Transaction-owned Drizzle operations.
+ * @param view - Same-transaction checked reads.
  * @param changes - Complete applied batch.
  */
-function verifyReferences(
-  queries: SqliteQueries,
-  view: LedgerReadView,
-  changes: LedgerChanges,
-): void {
+function verifyReferences(q: SqliteQueries, view: LedgerReadView, changes: LedgerChanges): void {
   const affected = new Map<string, { readonly scope: TrustedScope; readonly id: string }>();
   for (const { record } of changes.reservations)
     affected.set(recordKey(record.scope, record.reservationId), {
       scope: record.scope,
       id: record.reservationId,
     });
-  for (const record of changes.intents) {
+  for (const record of changes.intents)
     if (record.reservationId !== null)
       affected.set(recordKey(record.scope, record.reservationId), {
         scope: record.scope,
         id: record.reservationId,
       });
-  }
   for (const { binding } of changes.executions)
     affected.set(recordKey(binding.scope, binding.reservationId), {
       scope: binding.scope,
       id: binding.reservationId,
     });
   for (const { wallet, allocation } of changes.allocations) {
-    const record = queries.get("reservation", WALLET_WHERE + " AND reservationId=?", [
-      ...walletValues(wallet),
-      allocation.reservationId,
-    ]);
+    const record = q.get("reservation", (t) =>
+      and(walletCondition(t, wallet), eq(t.reservationId, allocation.reservationId)),
+    );
     assertStore(record !== null);
     affected.set(recordKey(record.scope, record.reservationId), {
       scope: record.scope,
@@ -136,47 +127,47 @@ function verifyReferences(
   for (const { scope, id } of affected.values()) {
     const record = view.getReservation(scope, id);
     assertStore(record !== null);
-    verifyReservation(queries, view, record);
+    verifyReservation(q, view, record);
   }
   for (const { wallet, observation } of changes.observations) {
-    const execution = queries.get("execution", WALLET_WHERE + " AND executionId=?", [
-      ...walletValues(wallet),
-      observation.executionId,
-    ]);
+    const execution = q.get("execution", (t) =>
+      and(walletCondition(t, wallet), eq(t.executionId, observation.executionId)),
+    );
     assertStore(execution !== null && execution.bindingDigest === observation.bindingDigest);
   }
   for (const { record } of changes.outbox)
     assertStore(
-      queries.get("event", WALLET_WHERE + " AND eventId=?", [
-        ...walletValues(record.wallet),
-        record.eventId,
-      ]) !== null,
+      q.get("event", (t) =>
+        and(walletCondition(t, record.wallet), eq(t.eventId, record.eventId)),
+      ) !== null,
     );
 }
 
-/** Apply a complete batch inside the owning immediate transaction; any failure must poison it.
- * @param queries - Lifetime-owned query operations.
- * @param view - Reads of this same transaction, never a separate connection.
- * @param changes - Independently owned inert batch.
+/** Apply one complete guarded batch inside its owning immediate transaction.
+ * @param q - Lifetime-owned Drizzle operations.
+ * @param view - Reads of this same transaction, never another connection.
+ * @param changes - Independently owned inert typed batch.
  */
 export function applySqliteChanges(
-  queries: SqliteQueries,
+  q: SqliteQueries,
   view: LedgerReadView,
   changes: LedgerChanges,
 ): void {
   for (const wallet of changes.wallets)
-    queries.immutable("wallet", wallet, WALLET_WHERE, walletValues(wallet));
+    q.immutable("wallet", wallet, (t) => walletCondition(t, wallet));
   for (const { record, expectedDigest } of changes.policies) {
     encodeLedgerRow("policySnapshot", record);
     const scope = record.policy.scope;
     requireWallet(view, scope, record.policy);
     const previous = view.getPolicy(scope);
     assertStore((previous?.policy.digest ?? null) === expectedDigest, "CONFIGURATION_CONFLICT");
-    queries.immutable("policySnapshot", record, SCOPE_WHERE + " AND policyId=? AND version=?", [
-      ...scopeValues(scope),
-      record.policy.policyId,
-      record.policy.version,
-    ]);
+    q.immutable("policySnapshot", record, (t) =>
+      and(
+        scopeCondition(t, scope),
+        eq(t.policyId, record.policy.policyId),
+        eq(t.version, record.policy.version),
+      ),
+    );
     const active = {
       scope,
       policyId: record.policy.policyId,
@@ -184,11 +175,10 @@ export function applySqliteChanges(
       digest: record.policy.digest,
     };
     if (previous)
-      queries.replace("activePolicy", active, SCOPE_WHERE + " AND digest=?", [
-        ...scopeValues(scope),
-        expectedDigest,
-      ]);
-    else queries.insert("activePolicy", active);
+      q.replace("activePolicy", active, (t) =>
+        and(scopeCondition(t, scope), eq(t.digest, previous.policy.digest)),
+      );
+    else q.insert("activePolicy", active);
   }
   for (const { record, expectedRevision } of changes.delegations) {
     encodeLedgerRow("delegationSnapshot", record);
@@ -201,17 +191,15 @@ export function applySqliteChanges(
       record.revision === (previous ? previous.revision + 1 : 1),
       "CONFIGURATION_CONFLICT",
     );
-    queries.immutable("delegationSnapshot", record, SCOPE_WHERE + " AND revision=?", [
-      ...scopeValues(scope),
-      record.revision,
-    ]);
+    q.immutable("delegationSnapshot", record, (t) =>
+      and(scopeCondition(t, scope), eq(t.revision, record.revision)),
+    );
     const active = { scope, revision: record.revision };
     if (previous)
-      queries.replace("activeDelegation", active, SCOPE_WHERE + " AND revision=?", [
-        ...scopeValues(scope),
-        expectedRevision,
-      ]);
-    else queries.insert("activeDelegation", active);
+      q.replace("activeDelegation", active, (t) =>
+        and(scopeCondition(t, scope), eq(t.revision, previous.revision)),
+      );
+    else q.insert("activeDelegation", active);
   }
   for (const { account, expectedRevision } of changes.budgets) {
     encodeLedgerRow("budget", account);
@@ -233,26 +221,27 @@ export function applySqliteChanges(
       "CONFIGURATION_CONFLICT",
     );
     if (previous)
-      queries.replace("budget", account, WALLET_WHERE + " AND accountId=? AND revision=?", [
-        ...walletValues(account.scope),
-        account.accountId,
-        expectedRevision,
-      ]);
-    else queries.insert("budget", account);
+      q.replace("budget", account, (t) =>
+        and(
+          walletCondition(t, account.scope),
+          eq(t.accountId, account.accountId),
+          eq(t.revision, previous.revision),
+        ),
+      );
+    else q.insert("budget", account);
   }
   for (const intent of changes.intents) {
     encodeLedgerRow("intent", intent);
     requireWallet(view, intent.scope, intent.decision.kind === "DENY" ? undefined : intent.intent);
-    queries.immutable("intent", intent, WALLET_WHERE + " AND intentId=?", [
-      ...walletValues(intent.scope),
-      intent.intentId,
-    ]);
+    q.immutable("intent", intent, (t) =>
+      and(walletCondition(t, intent.scope), eq(t.intentId, intent.intentId)),
+    );
   }
   for (const { record, expectedState } of changes.reservations) {
     encodeLedgerRow("reservation", record);
-    const values = [...walletValues(record.scope), record.reservationId];
-    const clause = WALLET_WHERE + " AND reservationId=?";
-    const previous = queries.get("reservation", clause, values);
+    const previous = q.get("reservation", (t) =>
+      and(walletCondition(t, record.scope), eq(t.reservationId, record.reservationId)),
+    );
     assertStore((previous?.state ?? null) === expectedState, "CONFIGURATION_CONFLICT");
     if (previous) {
       assertStore(
@@ -277,17 +266,28 @@ export function applySqliteChanges(
           canTransitionReservation(previous.state, record.state),
         "CONFIGURATION_CONFLICT",
       );
-      queries.replace("reservation", record, clause + " AND state=?", [...values, expectedState]);
+      q.replace("reservation", record, (t) =>
+        and(
+          walletCondition(t, record.scope),
+          eq(t.reservationId, record.reservationId),
+          eq(t.state, previous.state),
+        ),
+      );
     } else {
       assertStore(record.state === "RESERVED" && record.executionId === null);
-      queries.insert("reservation", record);
+      q.insert("reservation", record);
     }
   }
   for (const { wallet, allocation, expectedState } of changes.allocations) {
     encodeLedgerRow("allocation", { wallet, allocation });
-    const values = [...walletValues(wallet), allocation.accountId, allocation.reservationId];
-    const clause = WALLET_WHERE + " AND accountId=? AND reservationId=?";
-    const previous = queries.get("allocation", clause, values)?.allocation ?? null;
+    const previous =
+      q.get("allocation", (t) =>
+        and(
+          walletCondition(t, wallet),
+          eq(t.accountId, allocation.accountId),
+          eq(t.reservationId, allocation.reservationId),
+        ),
+      )?.allocation ?? null;
     assertStore((previous?.state ?? null) === expectedState, "CONFIGURATION_CONFLICT");
     if (previous) {
       assertStore(allocation.amountAtomic === previous.amountAtomic, "CONFIGURATION_CONFLICT");
@@ -296,31 +296,30 @@ export function applySqliteChanges(
           canTransitionReservation(previous.state, allocation.state),
         "CONFIGURATION_CONFLICT",
       );
-      queries.replace("allocation", { wallet, allocation }, clause + " AND state=?", [
-        ...values,
-        expectedState,
-      ]);
-    } else queries.insert("allocation", { wallet, allocation });
+      q.replace("allocation", { wallet, allocation }, (t) =>
+        and(
+          walletCondition(t, wallet),
+          eq(t.accountId, allocation.accountId),
+          eq(t.reservationId, allocation.reservationId),
+          eq(t.state, previous.state),
+        ),
+      );
+    } else q.insert("allocation", { wallet, allocation });
   }
   for (const execution of changes.executions)
-    queries.immutable("execution", execution, WALLET_WHERE + " AND executionId=?", [
-      ...walletValues(execution.binding.scope),
-      execution.executionId,
-    ]);
+    q.immutable("execution", execution, (t) =>
+      and(walletCondition(t, execution.binding.scope), eq(t.executionId, execution.executionId)),
+    );
   for (const record of changes.observations)
-    queries.immutable("observation", record, WALLET_WHERE + " AND evidenceId=?", [
-      ...walletValues(record.wallet),
-      record.observation.evidenceId,
-    ]);
+    q.immutable("observation", record, (t) =>
+      and(walletCondition(t, record.wallet), eq(t.evidenceId, record.observation.evidenceId)),
+    );
   for (const event of changes.events)
-    queries.immutable("event", event, WALLET_WHERE + " AND eventId=?", [
-      ...walletValues(event.wallet),
-      event.eventId,
-    ]);
+    q.immutable("event", event, (t) =>
+      and(walletCondition(t, event.wallet), eq(t.eventId, event.eventId)),
+    );
   for (const { record, expectedState, expectedClaimToken } of changes.outbox) {
     encodeLedgerRow("outbox", record);
-    const values = [...walletValues(record.wallet), record.eventId];
-    const clause = WALLET_WHERE + " AND eventId=?";
     const previous = view.getOutbox(record.wallet, record.eventId);
     assertStore(
       (previous?.state ?? null) === expectedState &&
@@ -340,14 +339,17 @@ export function applySqliteChanges(
           previous.state === "CLAIMED" || previous.state === "DELIVERED",
           "CONFIGURATION_CONFLICT",
         );
-      queries.replace("outbox", record, clause + " AND state=? AND claimToken IS ?", [
-        ...values,
-        expectedState,
-        expectedClaimToken,
-      ]);
+      q.replace("outbox", record, (t) =>
+        and(
+          walletCondition(t, record.wallet),
+          eq(t.eventId, record.eventId),
+          eq(t.state, previous.state),
+          expectedClaimToken === null ? isNull(t.claimToken) : eq(t.claimToken, expectedClaimToken),
+        ),
+      );
     } else {
       assertStore(record.state === "PENDING", "CONFIGURATION_CONFLICT");
-      queries.insert("outbox", record);
+      q.insert("outbox", record);
     }
   }
   for (const { record, expectedHighWaterMs } of changes.clocks) {
@@ -360,15 +362,14 @@ export function applySqliteChanges(
       "CLOCK_REGRESSION",
     );
     if (previous)
-      queries.replace("clock", record, WALLET_WHERE + " AND highWaterMs=?", [
-        ...walletValues(record.wallet),
-        expectedHighWaterMs,
-      ]);
-    else queries.insert("clock", record);
+      q.replace("clock", record, (t) =>
+        and(walletCondition(t, record.wallet), eq(t.highWaterMs, previous.highWaterMs)),
+      );
+    else q.insert("clock", record);
   }
   for (const fault of changes.faults) {
     requireWallet(view, fault.wallet);
-    queries.immutable("fault", fault, WALLET_WHERE, walletValues(fault.wallet));
+    q.immutable("fault", fault, (t) => walletCondition(t, fault.wallet));
   }
-  verifyReferences(queries, view, changes);
+  verifyReferences(q, view, changes);
 }

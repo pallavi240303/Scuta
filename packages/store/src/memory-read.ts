@@ -71,6 +71,28 @@ export function createReadView(current: () => MemoryState): LedgerReadView {
     getBudget(wallet, accountId) {
       return snapshot(current().budgets.get(recordKey(wallet, accountId)) ?? null);
     },
+    listBudgets(wallet) {
+      return snapshot(
+        [...current().budgets.values()]
+          .filter((record) => sameWallet(record.scope, wallet))
+          .sort((a, b) => compareIdentifiers(a.accountId, b.accountId)),
+      );
+    },
+    hasIntents(wallet) {
+      const state = current();
+      walletKey(wallet);
+      return [...state.intents.values()].some((record) => sameWallet(record.scope, wallet));
+    },
+    getEvent(wallet, eventId) {
+      return snapshot(current().events.get(recordKey(wallet, eventId)) ?? null);
+    },
+    getLatestEvent(wallet) {
+      return snapshot(
+        [...current().events.values()]
+          .filter((record) => sameWallet(record.wallet, wallet))
+          .sort((a, b) => b.sequence - a.sequence)[0] ?? null,
+      );
+    },
     getBudgets(scope) {
       const state = current();
       scopeKey(scope);

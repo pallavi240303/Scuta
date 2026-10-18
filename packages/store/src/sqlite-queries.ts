@@ -1,93 +1,83 @@
-/** @file Private prepared queries with checked row codecs and statically selected table identities. */
+/** @file Store-only Drizzle queries with typed predicates, checked row codecs and no caller SQL. */
 import type { Database } from "bun:sqlite";
 import { isDeepStrictEqual } from "node:util";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import type { SQL } from "drizzle-orm";
+import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
 import { LedgerError } from "@scuta/core";
-import { LEDGER_TABLE_NAMES } from "./schema.js";
+import { DRIZZLE_TABLES } from "./drizzle-schema.js";
 import { decodeLedgerRow, encodeLedgerRow } from "./row-codecs.js";
-import type { LedgerRecordKind, LedgerRecords, SqliteRow, SqliteValue } from "./row-types.js";
+import type { LedgerRecordKind, LedgerRecords } from "./row-types.js";
 
-/** Prepared typed record access restricted to a callback-owned connection. */
+/** Predicate bound to the columns of exactly one stored record kind. */
+export type RecordPredicate<K extends LedgerRecordKind> = (
+  table: (typeof DRIZZLE_TABLES)[K],
+) => SQL | undefined;
+/** Typed ordering and optional result bound, never embedded SQL text. */
+export interface RecordQueryOptions<K extends LedgerRecordKind> {
+  readonly orderBy?: (table: (typeof DRIZZLE_TABLES)[K]) => readonly (SQL | AnySQLiteColumn)[];
+  readonly limit?: number;
+}
+/** Checked record access confined to a callback-owned connection. */
 export interface SqliteQueries {
   get<K extends LedgerRecordKind>(
     kind: K,
-    clause: string,
-    values: readonly SqliteValue[],
+    predicate: RecordPredicate<K>,
+    options?: RecordQueryOptions<K>,
   ): LedgerRecords[K] | null;
   list<K extends LedgerRecordKind>(
     kind: K,
-    clause: string,
-    values: readonly SqliteValue[],
+    predicate: RecordPredicate<K>,
+    options?: RecordQueryOptions<K>,
   ): readonly LedgerRecords[K][];
   insert<K extends LedgerRecordKind>(kind: K, record: LedgerRecords[K]): void;
   replace<K extends LedgerRecordKind>(
     kind: K,
     record: LedgerRecords[K],
-    clause: string,
-    values: readonly SqliteValue[],
+    predicate: RecordPredicate<K>,
   ): void;
   immutable<K extends LedgerRecordKind>(
     kind: K,
     record: LedgerRecords[K],
-    clause: string,
-    values: readonly SqliteValue[],
+    predicate: RecordPredicate<K>,
   ): void;
 }
 
-/** Create typed query operations without exposing raw SQL through the public store.
- * @param current - Lifetime and poisoned-transaction gate.
- * @returns Private query methods; clauses are trusted internal SQL only.
+/** Bind Drizzle to the lifetime-owned Bun connection without replacing native transaction control.
+ * @param current - Callback and poisoned-transaction gate.
+ * @returns Typed store-private operations using synchronous Drizzle execution.
  */
 export function createSqliteQueries(current: () => Database): SqliteQueries {
+  const database = drizzle(current());
   const queries: SqliteQueries = {
-    get(kind, clause, values) {
-      const row = current()
-        .query<SqliteRow, SqliteValue[]>(
-          "SELECT * FROM " + LEDGER_TABLE_NAMES[kind] + " WHERE " + clause,
-        )
-        .get(...values);
-      return row === null ? null : decodeLedgerRow(kind, row);
+    get(kind, predicate, options) {
+      return queries.list(kind, predicate, { ...options, limit: 1 })[0] ?? null;
     },
-    list(kind, clause, values) {
-      const rows = current()
-        .query<SqliteRow, SqliteValue[]>(
-          "SELECT * FROM " + LEDGER_TABLE_NAMES[kind] + " WHERE " + clause,
-        )
-        .all(...values);
-      return Object.freeze(rows.map((row) => decodeLedgerRow(kind, row)));
+    list(kind, predicate, options) {
+      current();
+      const table = DRIZZLE_TABLES[kind];
+      let query = database.select().from(table).where(predicate(table)).$dynamic();
+      if (options?.orderBy) query = query.orderBy(...options.orderBy(table));
+      if (options?.limit !== undefined) query = query.limit(options.limit);
+      return Object.freeze(query.all().map((row) => decodeLedgerRow(kind, row)));
     },
     insert(kind, record) {
-      const row = encodeLedgerRow(kind, record);
-      const columns = Object.keys(row);
-      current()
-        .query(
-          "INSERT INTO " +
-            LEDGER_TABLE_NAMES[kind] +
-            " (" +
-            columns.join(",") +
-            ") VALUES (" +
-            columns.map(() => "?").join(",") +
-            ")",
-        )
-        .run(...Object.values(row));
+      current();
+      database.insert(DRIZZLE_TABLES[kind]).values(encodeLedgerRow(kind, record)).run();
     },
-    replace(kind, record, clause, values) {
-      const row = encodeLedgerRow(kind, record);
-      const result = current()
-        .query(
-          "UPDATE " +
-            LEDGER_TABLE_NAMES[kind] +
-            " SET " +
-            Object.keys(row)
-              .map((column) => column + "=?")
-              .join(",") +
-            " WHERE " +
-            clause,
-        )
-        .run(...Object.values(row), ...values);
-      if (result.changes !== 1) throw new LedgerError("CONFIGURATION_CONFLICT");
+    replace(kind, record, predicate) {
+      current();
+      const table = DRIZZLE_TABLES[kind];
+      const result = database
+        .update(table)
+        .set(encodeLedgerRow(kind, record))
+        .where(predicate(table))
+        .returning({ ownerId: table.ownerId })
+        .all();
+      if (result.length !== 1) throw new LedgerError("CONFIGURATION_CONFLICT");
     },
-    immutable(kind, record, clause, values) {
-      const previous = queries.get(kind, clause, values);
+    immutable(kind, record, predicate) {
+      const previous = queries.get(kind, predicate);
       if (previous === null) queries.insert(kind, record);
       else if (!isDeepStrictEqual(encodeLedgerRow(kind, previous), encodeLedgerRow(kind, record)))
         throw new LedgerError("CONFIGURATION_CONFLICT");
